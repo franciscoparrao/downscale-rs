@@ -1,0 +1,17 @@
+[package]
+name = "downscale-cli"
+description = "CLI de downscale-rs: bias correction de series climáticas desde CSV"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "downscale"
+path = "src/main.rs"
+
+[dependencies]
+downscale-core = { path = "../downscale-core" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }

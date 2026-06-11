@@ -1,0 +1,11 @@
+[package]
+name = "downscale-core"
+description = "Núcleo de bias correction y downscaling estadístico de clima: quantile mapping, validación split temporal, métricas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+thiserror = "2"
