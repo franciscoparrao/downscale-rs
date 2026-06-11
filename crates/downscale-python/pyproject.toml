@@ -1,0 +1,31 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "downscale-rs"
+version = "0.1.0"
+description = "Bias correction and statistical downscaling of climate variables, powered by Rust"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "Francisco Parra-O.", email = "francisco.parra.o@usach.cl" }]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Topic :: Scientific/Engineering :: Hydrology",
+]
+keywords = ["climate", "downscaling", "bias-correction", "quantile-mapping", "hydrology", "rust"]
+dependencies = ["numpy>=1.20"]
+
+[project.urls]
+Repository = "https://github.com/franciscoparrao/downscale-rs"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "downscale_rs"
+manifest-path = "Cargo.toml"

@@ -1,6 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["crates/downscale-core", "crates/downscale-cli"]
+members = ["crates/downscale-core", "crates/downscale-cli", "crates/downscale-python"]
+
+[workspace.dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = "0.23"
 
 [workspace.package]
 version = "0.1.0"

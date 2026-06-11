@@ -77,6 +77,16 @@ solo `thiserror`):
 Integración verificada (2026-06-11): ERA5 corregido (Quinta Normal) →
 `downscale forcing` → `rainflow run` GR4J, 24.905 pasos sin errores.
 
+`crates/downscale-python` (módulo `downscale_rs`, PyO3 0.23 + numpy 0.23,
+maturin; convención SurtGIS): clases espejo de la API Rust con
+numpy-in/numpy-out (QuantileMapping, ParametricQuantileMapping,
+DeltaChange, WetDayCorrection, AnalogDownscaling con predictores 2D,
+LinearDownscaling) + funciones (rmse, mean_bias, ks_statistic,
+quantile_bias, validate_split → dict). `[lib] test = false` (los tests
+viven en Python: `tests/test_downscale.py`, 9 tests incl. paridad
+bindings ≡ CLI en Quinta Normal). Build: `maturin build --release` +
+pip install del wheel.
+
 Hallazgo en Quinta Normal: el sesgo residual P95 (+2.0 mm) NO es llovizna
 (la adaptación de umbral no lo cambia) sino **no-estacionariedad**: la
 calibración 1950–1997 es más lluviosa que la validación 1997–2018
@@ -107,9 +117,9 @@ LICENSE-APACHE, README.md en inglés (cara pública / paper EMS).
 **Sin remote aún** — crear con `gh repo create franciscoparrao/downscale-rs`.
 
 ## Próximos pasos al retomar
-1. Crear remote en GitHub y push (activa el CI).
-2. Superficie PyO3 + WASM (patrón multi-target del portafolio); CLI para
-   análogos/regresión.
-3. (v0.2) QDM, multivariado; predictores ricos para análogos (campos ERA5);
+1. WASM (demo navegador) si se quiere completar el patrón multi-target;
+   CLI para análogos/regresión; job de maturin/pytest en CI.
+2. (v0.2) QDM, multivariado; predictores ricos para análogos (campos ERA5);
    paridad del QM paramétrico vs xsdba/scipy; PET corregida (Hargreaves) y
    forzantes multi-sitio para rainflow semi-distribuido.
+3. Software paper EMS: figuras (paridad, caso Quinta Normal) y draft.

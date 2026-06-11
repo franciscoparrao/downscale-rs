@@ -49,6 +49,8 @@ tolerances: `docs/parity.md`; reproduce with
 - `crates/downscale-cli` — the `downscale` binary: `validate`, `correct`,
   `forcing` over `date,value` CSV files (tolerant reader: headers, NA,
   DGA/CR2 `-9999` sentinels).
+- `crates/downscale-python` — PyO3 bindings (`downscale_rs` module):
+  numpy-in/numpy-out for every method, built with maturin.
 
 ## Quick start
 
@@ -70,6 +72,31 @@ downscale forcing --pr pr_corrected.csv --pet era5_pet.csv \
 
 Input CSVs are `date,value` with ISO dates; series are paired by date
 (distribution-based methods do not require pairing for calibration).
+
+## Python
+
+```bash
+cd crates/downscale-python && maturin build --release
+pip install ../../target/wheels/downscale_rs-*.whl
+```
+
+```python
+import numpy as np
+import downscale_rs as ds
+
+qm = ds.QuantileMapping(obs, era5, n_quantiles=100, kind="mult", nodes="midpoint")
+corrected = qm.apply(era5_future)              # np.ndarray
+
+pqm = ds.ParametricQuantileMapping(obs, era5, dist="gamma", wet_threshold=0.1)
+report = ds.validate_split(obs, era5, calib_frac=0.7, kind="mult")
+print(report["ks"], report["ks_raw"])          # corrected vs raw baseline
+```
+
+Classes mirror the Rust API: `QuantileMapping`, `ParametricQuantileMapping`,
+`DeltaChange`, `WetDayCorrection`, `AnalogDownscaling` (2-D predictor
+arrays), `LinearDownscaling`; functions `rmse`, `mean_bias`,
+`ks_statistic`, `quantile_bias`, `validate_split`. Tests:
+`crates/downscale-python/tests/test_downscale.py`.
 
 ## Data for the test case
 

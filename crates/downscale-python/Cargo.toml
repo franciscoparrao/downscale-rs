@@ -1,0 +1,22 @@
+[package]
+name = "downscale-python"
+description = "Python bindings for downscale-rs (bias correction and statistical downscaling) via PyO3"
+publish = false # Distributed via PyPI, not crates.io
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "downscale_rs"
+crate-type = ["cdylib"]
+# Los tests viven en Python (tests/test_downscale.py); el target de test
+# Rust no linkea con extension-module.
+test = false
+doctest = false
+
+[dependencies]
+downscale-core = { path = "../downscale-core" }
+pyo3.workspace = true
+numpy.workspace = true
