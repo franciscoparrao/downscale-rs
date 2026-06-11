@@ -99,10 +99,17 @@ Normal vs ERA5, reproducible con `scripts/parity_quinta_normal.py`:
 - **cmethods diverge**: su CDF binned por histograma no corrige frecuencia
   de días húmedos (KS queda en 0.1486 = raw). Argumento para el paper.
 
+## Repo (2026-06-11)
+Git local con commit raíz c825282 (29 archivos, 4.402 líneas). CI GitHub
+Actions (`.github/workflows/ci.yml`): fmt --check, clippy -D warnings,
+test, build release — secuencia verificada localmente. LICENSE-MIT +
+LICENSE-APACHE, README.md en inglés (cara pública / paper EMS).
+**Sin remote aún** — crear con `gh repo create franciscoparrao/downscale-rs`.
+
 ## Próximos pasos al retomar
-1. Superficie PyO3 + WASM (patrón multi-target del portafolio); CLI para
+1. Crear remote en GitHub y push (activa el CI).
+2. Superficie PyO3 + WASM (patrón multi-target del portafolio); CLI para
    análogos/regresión.
-2. (v0.2) QDM, multivariado; predictores ricos para análogos (campos ERA5);
+3. (v0.2) QDM, multivariado; predictores ricos para análogos (campos ERA5);
    paridad del QM paramétrico vs xsdba/scipy; PET corregida (Hargreaves) y
    forzantes multi-sitio para rainflow semi-distribuido.
-3. Repo git + CI + LICENSE (prerequisito software paper EMS).
