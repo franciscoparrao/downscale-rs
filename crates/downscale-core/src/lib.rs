@@ -5,10 +5,15 @@
 //! `f64`; la lectura de CSV/NetCDF/GeoTIFF vive en los crates de superficie
 //! (CLI, PyO3).
 //!
-//! ## MVP v0.1
+//! ## Métodos
 //!
 //! - [`qm`]: quantile mapping empírico (aditivo y multiplicativo, nodos
 //!   con extremos o puntos medios).
+//! - [`qdm`]: quantile delta mapping (Cannon et al. 2015) — preserva la
+//!   señal de cambio del modelo cuantil a cuantil (v0.2).
+//! - [`multivariate`]: Schaake shuffle (Clark et al. 2004) — restaura la
+//!   dependencia entre variables tras la corrección univariada (v0.2).
+//! - [`pet`]: PET de Hargreaves con radiación extraterrestre FAO-56 (v0.2).
 //! - [`parametric`]: QM paramétrico — normal (temperatura) y gamma mixta
 //!   con masa en cero (precipitación; corrige frecuencia de días húmedos).
 //! - [`analog`]: downscaling por análogos (k-NN estandarizado).
@@ -48,7 +53,10 @@ pub mod delta;
 pub mod error;
 pub mod forcing;
 pub mod metrics;
+pub mod multivariate;
 pub mod parametric;
+pub mod pet;
+pub mod qdm;
 pub mod qm;
 pub mod regression;
 mod special;
@@ -59,7 +67,10 @@ pub use analog::AnalogDownscaling;
 pub use delta::DeltaChange;
 pub use error::{DownscaleError, Result};
 pub use forcing::{ForcingSeries, ForcingSet, Variable};
+pub use multivariate::schaake_shuffle;
 pub use parametric::{Distribution, ParametricQuantileMapping};
+pub use pet::hargreaves;
+pub use qdm::QuantileDeltaMapping;
 pub use qm::{Kind, NodePlacement, QuantileMapping};
 pub use regression::LinearDownscaling;
 pub use validation::{QmOptions, ValidationReport, validate_split, validate_split_with};

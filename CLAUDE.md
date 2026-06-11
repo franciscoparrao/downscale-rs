@@ -13,6 +13,20 @@ Tienes carpetas `downscaling` y `super-resolution-dem` pero no un motor
 operacional. El campo es scripts Python dispersos (xclim, cmethods). Rust lo
 hace determinista y batch-friendly para muchos puntos/grillas.
 
+## Métodos v0.2 (2026-06-11)
+- [x] **QDM** (`qdm.rs`, Cannon et al. 2015): preserva la señal de cambio
+  cuantil a cuantil; CLI `correct --method qdm`. Paridad vs
+  xsdba.QuantileDeltaMapping en Quinta Normal: misma fórmula, difiere el
+  estimador de `p` (rankdata vs interpolación de nodos); KS holdout
+  rust 0.0147 vs xsdba 0.0301 (docs/parity.md).
+- [x] **Schaake shuffle** (`multivariate.rs`, Clark et al. 2004):
+  restaura dependencia entre variables tras corrección univariada;
+  marginales exactas + rangos de la plantilla.
+- [x] **PET Hargreaves** (`pet.rs`, FAO-56): Ra de latitud+doy (test vs
+  ejemplo 8 FAO), `hargreaves_from_epoch_days` para el eje de forcing.
+- [ ] Pendiente v0.2: predictores ricos para análogos; MBCn si se
+  necesita multivariado iterativo; aplicación por ventanas de QDM.
+
 ## Alcance MVP (v0.1) — COMPLETO
 - [x] Bias correction: quantile mapping empírico (aditivo/multiplicativo, nodos endpoints/midpoint), paramétrico (normal y gamma mixta con masa en cero), delta change, adaptación de umbral seco/húmedo.
 - [x] Downscaling por análogos (k-NN estandarizado, media ponderada por distancia inversa) y regresión lineal múltiple (OLS).

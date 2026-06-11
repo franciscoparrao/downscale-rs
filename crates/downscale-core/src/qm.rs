@@ -109,14 +109,7 @@ impl QuantileMapping {
             });
         }
 
-        let probs: Vec<f64> = match placement {
-            NodePlacement::Endpoints => (0..n_quantiles)
-                .map(|i| i as f64 / (n_quantiles - 1) as f64)
-                .collect(),
-            NodePlacement::Midpoint => (0..n_quantiles)
-                .map(|i| (i as f64 + 0.5) / n_quantiles as f64)
-                .collect(),
-        };
+        let probs = node_probs(n_quantiles, placement);
         let obs_q = empirical_quantiles(obs, &probs);
         let mod_q = empirical_quantiles(model, &probs);
 
@@ -185,9 +178,21 @@ impl QuantileMapping {
     }
 }
 
+/// Nodos de probabilidad según la colocación elegida.
+pub(crate) fn node_probs(n_quantiles: usize, placement: NodePlacement) -> Vec<f64> {
+    match placement {
+        NodePlacement::Endpoints => (0..n_quantiles)
+            .map(|i| i as f64 / (n_quantiles - 1) as f64)
+            .collect(),
+        NodePlacement::Midpoint => (0..n_quantiles)
+            .map(|i| (i as f64 + 0.5) / n_quantiles as f64)
+            .collect(),
+    }
+}
+
 /// Cuantiles empíricos con interpolación lineal (tipo 7 de Hyndman & Fan,
 /// el default de NumPy/R), sobre una copia ordenada de la serie.
-fn empirical_quantiles(series: &[f64], probs: &[f64]) -> Vec<f64> {
+pub(crate) fn empirical_quantiles(series: &[f64], probs: &[f64]) -> Vec<f64> {
     let mut sorted = series.to_vec();
     sorted.sort_unstable_by(|a, b| a.partial_cmp(b).expect("series validada sin NaN"));
     probs.iter().map(|&p| quantile_sorted(&sorted, p)).collect()
@@ -211,7 +216,7 @@ pub(crate) fn quantile_sorted(sorted: &[f64], p: f64) -> f64 {
 ///
 /// Para `x` fuera del rango devuelve el extremo (clamp). Tramos con `xs`
 /// repetidos (CDF plana) devuelven el primer `y` del tramo.
-fn interp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
+pub(crate) fn interp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
     debug_assert_eq!(xs.len(), ys.len());
     let n = xs.len();
     if x <= xs[0] {

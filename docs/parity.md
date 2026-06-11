@@ -74,6 +74,25 @@ El residuo ≤0.09 mm se debe a que xsdba interpola *factores de ajuste*
 (af = obs_q/sim_q) mientras nosotros componemos las CDFs; ambas son
 formulaciones válidas del mismo estimador.
 
+## QDM vs xsdba.QuantileDeltaMapping (2026-06-11, v0.2)
+
+Mismo dataset y split, QDM multiplicativo, 100 cuantiles, nodos midpoint,
+aplicado al período de validación:
+
+| rust QDM vs xsdba QDM | mediana \|Δ\| | P90 \|Δ\| | P99 \|Δ\| | RMSD | max \|Δ\| |
+|---|---|---|---|---|---|
+| | 0.000 | 0.105 | 2.928 | 0.543 | 3.070 |
+
+KS contra las observaciones del holdout: **rust 0.0147, xsdba 0.0301**.
+
+La fórmula es la misma (Cannon 2015; `obs_q(p)·x/hist_q(p)` ≡
+`x·[obs_q(p)/hist_q(p)]`). La diferencia está en cómo se estima la
+probabilidad de no-excedencia `p` de cada valor en la serie de proyección:
+xsdba usa el rango empírico directo (rankdata/n) mientras nosotros
+interpolamos sobre la CDF de nodos — ambos estimadores consistentes que
+difieren en las colas. En este caso la variante nuestra reproduce mejor la
+distribución observada del holdout.
+
 ## Tolerancias declaradas (vs xsdba EQM, este dataset)
 
 - Días secos: exactos (Δ = 0).

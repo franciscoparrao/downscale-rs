@@ -139,6 +139,50 @@ impl ParametricQuantileMapping {
     }
 }
 
+/// Quantile delta mapping (Cannon et al. 2015): corrige preservando la
+/// señal de cambio de la serie objetivo cuantil a cuantil.
+#[pyclass]
+struct QuantileDeltaMapping {
+    inner: core::QuantileDeltaMapping,
+}
+
+#[pymethods]
+impl QuantileDeltaMapping {
+    #[new]
+    #[pyo3(signature = (obs, model_hist, n_quantiles=100, kind="add", nodes="endpoints"))]
+    fn new(
+        obs: PyReadonlyArray1<'_, f64>,
+        model_hist: PyReadonlyArray1<'_, f64>,
+        n_quantiles: usize,
+        kind: &str,
+        nodes: &str,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: core::QuantileDeltaMapping::fit_with_nodes(
+                obs.as_slice()?,
+                model_hist.as_slice()?,
+                n_quantiles,
+                parse_kind(kind)?,
+                parse_nodes(nodes)?,
+            )
+            .map_err(err)?,
+        })
+    }
+
+    /// Corrige una serie de proyección (su CDF se estima de ella misma).
+    fn apply<'py>(
+        &self,
+        py: Python<'py>,
+        proj: PyReadonlyArray1<'_, f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        Ok(self
+            .inner
+            .apply(proj.as_slice()?)
+            .map_err(err)?
+            .into_pyarray(py))
+    }
+}
+
 /// Delta change: perturba observaciones con la señal de cambio del modelo.
 #[pyclass]
 struct DeltaChange {
@@ -299,6 +343,50 @@ impl LinearDownscaling {
     }
 }
 
+/// Schaake shuffle (Clark et al. 2004): reordena `corrected` (2D,
+/// filas = días) para reproducir la estructura de rangos de `template`,
+/// preservando exactamente las marginales corregidas.
+#[pyfunction]
+fn schaake_shuffle<'py>(
+    py: Python<'py>,
+    template: PyReadonlyArray2<'_, f64>,
+    corrected: PyReadonlyArray2<'_, f64>,
+) -> PyResult<Bound<'py, numpy::PyArray2<f64>>> {
+    use numpy::ndarray::Array2;
+    let (flat_t, n_vars) = flatten_2d(&template);
+    let (flat_c, n_vars_c) = flatten_2d(&corrected);
+    if n_vars != n_vars_c {
+        return Err(PyValueError::new_err(format!(
+            "template tiene {n_vars} columnas y corrected {n_vars_c}"
+        )));
+    }
+    let out = core::multivariate::schaake_shuffle(&flat_t, &flat_c, n_vars).map_err(err)?;
+    let rows = out.len() / n_vars;
+    let arr = Array2::from_shape_vec((rows, n_vars), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(arr.into_pyarray(py))
+}
+
+/// PET de Hargreaves (mm/día) con radiación extraterrestre FAO-56.
+/// `days_of_year`: día del año (1..=366) por paso; `latitude_deg`: sur negativo.
+#[pyfunction]
+fn hargreaves<'py>(
+    py: Python<'py>,
+    tmin: PyReadonlyArray1<'_, f64>,
+    tmax: PyReadonlyArray1<'_, f64>,
+    days_of_year: Vec<u32>,
+    latitude_deg: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    Ok(core::pet::hargreaves(
+        tmin.as_slice()?,
+        tmax.as_slice()?,
+        &days_of_year,
+        latitude_deg,
+    )
+    .map_err(err)?
+    .into_pyarray(py))
+}
+
 /// Raíz del error cuadrático medio entre series pareadas.
 #[pyfunction]
 fn rmse(sim: PyReadonlyArray1<'_, f64>, obs: PyReadonlyArray1<'_, f64>) -> PyResult<f64> {
@@ -384,11 +472,14 @@ fn validate_split<'py>(
 #[pymodule]
 fn downscale_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<QuantileMapping>()?;
+    m.add_class::<QuantileDeltaMapping>()?;
     m.add_class::<ParametricQuantileMapping>()?;
     m.add_class::<DeltaChange>()?;
     m.add_class::<WetDayCorrection>()?;
     m.add_class::<AnalogDownscaling>()?;
     m.add_class::<LinearDownscaling>()?;
+    m.add_function(wrap_pyfunction!(schaake_shuffle, m)?)?;
+    m.add_function(wrap_pyfunction!(hargreaves, m)?)?;
     m.add_function(wrap_pyfunction!(rmse, m)?)?;
     m.add_function(wrap_pyfunction!(mean_bias, m)?)?;
     m.add_function(wrap_pyfunction!(ks_statistic, m)?)?;

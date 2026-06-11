@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use downscale_core::forcing::{ForcingSeries, ForcingSet, Variable};
+use downscale_core::qdm::QuantileDeltaMapping;
 use downscale_core::qm::{Kind, NodePlacement, QuantileMapping};
 use downscale_core::validation::{QmOptions, validate_split_with};
 use downscale_core::wetday::WetDayCorrection;
@@ -39,6 +40,15 @@ impl From<KindArg> for Kind {
             KindArg::Mult => Kind::Multiplicative,
         }
     }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum MethodArg {
+    /// Quantile mapping empírico (corrige hacia el clima observado).
+    Eqm,
+    /// Quantile delta mapping (Cannon 2015: corrige preservando la señal
+    /// de cambio de la serie objetivo cuantil a cuantil).
+    Qdm,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -96,6 +106,9 @@ enum Command {
         /// CSV a corregir (fecha,valor). Si se omite, se corrige `--model` completo.
         #[arg(long)]
         target: Option<PathBuf>,
+        /// Método de corrección.
+        #[arg(long, value_enum, default_value = "eqm")]
+        method: MethodArg,
         /// Tipo de corrección en colas.
         #[arg(long, value_enum, default_value = "add")]
         kind: KindArg,
@@ -166,6 +179,7 @@ fn main() -> Result<()> {
             obs,
             model,
             target,
+            method,
             kind,
             quantiles,
             nodes,
@@ -183,8 +197,6 @@ fn main() -> Result<()> {
                 .transpose()?;
             let m = wd.as_ref().map_or(m.clone(), |w| w.transform(&m));
 
-            let qm = QuantileMapping::fit_with_nodes(&o, &m, quantiles, kind.into(), nodes.into())?;
-
             let target_s = match &target {
                 Some(p) => Series::read_csv(p)?,
                 None => model_s,
@@ -192,7 +204,21 @@ fn main() -> Result<()> {
             let target_values = wd
                 .as_ref()
                 .map_or(target_s.values.clone(), |w| w.transform(&target_s.values));
-            let corrected = qm.apply(&target_values)?;
+
+            let corrected = match method {
+                MethodArg::Eqm => {
+                    QuantileMapping::fit_with_nodes(&o, &m, quantiles, kind.into(), nodes.into())?
+                        .apply(&target_values)?
+                }
+                MethodArg::Qdm => QuantileDeltaMapping::fit_with_nodes(
+                    &o,
+                    &m,
+                    quantiles,
+                    kind.into(),
+                    nodes.into(),
+                )?
+                .apply(&target_values)?,
+            };
 
             let mut out = String::from("date,value\n");
             for (d, v) in target_s.dates.iter().zip(&corrected) {

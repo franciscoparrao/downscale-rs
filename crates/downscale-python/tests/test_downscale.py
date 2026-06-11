@@ -97,6 +97,35 @@ def test_validate_split_dict():
     assert len(report["quantile_bias"]) == 12
 
 
+def test_qdm_preserves_change_signal():
+    obs = 10.0 + 8.0 * rng.uniform(size=2000)
+    hist = obs + 2.5  # sesgo
+    proj = hist + 4.0  # señal de cambio
+    qdm = ds.QuantileDeltaMapping(obs, hist, n_quantiles=100, kind="add")
+    corrected = qdm.apply(proj)
+    assert abs(corrected.mean() - (obs.mean() + 4.0)) < 1e-6
+
+
+def test_schaake_shuffle_restores_rank_structure():
+    template = rng.uniform(size=(300, 2))
+    template[:, 1] = template[:, 0] + 0.01 * rng.uniform(size=300)  # corr alta
+    corrected = rng.uniform(size=(300, 2)) * 50.0
+    out = ds.schaake_shuffle(template, corrected)
+    # Marginales preservadas y correlación de rangos alta como la plantilla.
+    np.testing.assert_allclose(np.sort(out[:, 0]), np.sort(corrected[:, 0]))
+    from numpy import corrcoef
+
+    rank = lambda x: np.argsort(np.argsort(x))
+    rho = corrcoef(rank(out[:, 0]), rank(out[:, 1]))[0, 1]
+    assert rho > 0.99, f"rho = {rho}"
+
+
+def test_hargreaves_fao56():
+    # Santiago en verano: PET plausible.
+    pet = ds.hargreaves(np.array([13.0]), np.array([30.0]), [15], -33.45)
+    assert 4.0 <= pet[0] <= 8.0
+
+
 def test_real_data_matches_rust_cli():
     """Paridad bindings vs CLI sobre el caso Quinta Normal (si hay datos)."""
     import os
