@@ -24,8 +24,15 @@ hace determinista y batch-friendly para muchos puntos/grillas.
   marginales exactas + rangos de la plantilla.
 - [x] **PET Hargreaves** (`pet.rs`, FAO-56): Ra de latitud+doy (test vs
   ejemplo 8 FAO), `hargreaves_from_epoch_days` para el eje de forcing.
-- [ ] Pendiente v0.2: predictores ricos para análogos; MBCn si se
-  necesita multivariado iterativo; aplicación por ventanas de QDM.
+- [x] **Predictores ricos para análogos** (`docs/predictors.md`,
+  2026-06-13): 8 predictores sinópticos de superficie ERA5 (pmsl, rh,
+  dewpoint, cloud, vpd, u, v, t2m) + armónicos, experimento vía bindings
+  Python. Hallazgos: enriquecer baja RMSE de análogos k=10 de 3.61 a 3.14
+  (−13%); análogos k=1 + synoptic da el MEJOR KS de la tabla (0.0058 <
+  EQM 0.0179); regresión mejor RMSE (3.03) pero colapsa varianza (KS 0.54).
+  Confirma trade-off RMSE↔distribución, accionable. Tabla lista para paper.
+- [ ] Pendiente v0.2: MBCn si se necesita multivariado iterativo;
+  aplicación por ventanas de QDM.
 
 ## Alcance MVP (v0.1) — COMPLETO
 - [x] Bias correction: quantile mapping empírico (aditivo/multiplicativo, nodos endpoints/midpoint), paramétrico (normal y gamma mixta con masa en cero), delta change, adaptación de umbral seco/húmedo.
@@ -131,9 +138,11 @@ LICENSE-APACHE, README.md en inglés (cara pública / paper EMS).
 **Sin remote aún** — crear con `gh repo create franciscoparrao/downscale-rs`.
 
 ## Próximos pasos al retomar
-1. WASM (demo navegador) si se quiere completar el patrón multi-target;
-   CLI para análogos/regresión; job de maturin/pytest en CI.
-2. (v0.2) QDM, multivariado; predictores ricos para análogos (campos ERA5);
-   paridad del QM paramétrico vs xsdba/scipy; PET corregida (Hargreaves) y
+1. **Software paper EMS** (próximo gran hito): outline calibrado con
+   `/paper-review-ems`; figuras (paridad vs xsdba, caso Quinta Normal,
+   tabla de predictores/`docs/predictors.md`, esquema cadena hazard);
+   draft. Todo el material ya existe en docs/.
+2. Pulido: WASM (demo navegador); CLI para análogos/regresión; job de
+   maturin/pytest en CI; paridad QM paramétrico vs xsdba/scipy.
+3. v0.2 extensiones: MBCn multivariado iterativo; QDM por ventanas;
    forzantes multi-sitio para rainflow semi-distribuido.
-3. Software paper EMS: figuras (paridad, caso Quinta Normal) y draft.
