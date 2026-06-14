@@ -41,6 +41,14 @@ frequency on zero-inflated precipitation. Details and declared
 tolerances: `docs/parity.md`; reproduce with
 `scripts/parity_quinta_normal.py`.
 
+## Performance
+
+A full EQM correction (calibrate + apply) over the 24 900-day Quinta Normal
+case runs in **1.5 ms** — about **11× faster than cmethods** (pure NumPy,
+algorithm-to-algorithm) and **~150× faster than the xclim/xsdba** xarray
+flow. QDM is similar (1.9 ms). Details, microbenchmarks and methodology:
+`docs/performance.md` (`cargo bench` + `scripts/benchmark_vs_python.py`).
+
 ## Layout
 
 - `crates/downscale-core` — the engine. Pure `f64` slices, no I/O, one

@@ -9,3 +9,10 @@ authors.workspace = true
 
 [dependencies]
 thiserror = "2"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "bias_correction"
+harness = false

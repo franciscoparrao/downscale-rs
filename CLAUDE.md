@@ -13,6 +13,15 @@ Tienes carpetas `downscaling` y `super-resolution-dem` pero no un motor
 operacional. El campo es scripts Python dispersos (xclim, cmethods). Rust lo
 hace determinista y batch-friendly para muchos puntos/grillas.
 
+## Rendimiento (2026-06-13) — `docs/performance.md`
+Microbenchmarks criterion (`cargo bench`) + comparación cross-language
+(`scripts/benchmark_vs_python.py`). Corrección EQM completa del caso Quinta
+Normal: **1.5 ms** en downscale-rs vs **16.8 ms cmethods (11×)** y
+**233 ms xsdba/xclim (156×)**. QDM 1.9 ms vs 240 ms xsdba (125×). El 11× vs
+cmethods es algoritmo-a-algoritmo (NumPy puro); el 125–156× vs xsdba incluye
+el overhead real del stack xarray/dask. Demuestra el sello del portafolio
+("determinista y rápido") — argumento directo para el paper EMS.
+
 ## Métodos v0.2 (2026-06-11)
 - [x] **QDM** (`qdm.rs`, Cannon et al. 2015): preserva la señal de cambio
   cuantil a cuantil; CLI `correct --method qdm`. Paridad vs
