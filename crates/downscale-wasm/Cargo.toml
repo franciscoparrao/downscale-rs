@@ -1,0 +1,18 @@
+[package]
+name = "downscale-wasm"
+description = "WebAssembly bindings for downscale-rs (bias correction and statistical downscaling)"
+keywords = ["climate", "downscaling", "bias-correction", "wasm", "webassembly"]
+categories = ["science", "wasm"]
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+downscale-core = { path = "../downscale-core" }
+wasm-bindgen.workspace = true

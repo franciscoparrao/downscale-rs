@@ -156,14 +156,23 @@ LICENSE-APACHE, README.md en inglés (cara pública / paper EMS).
 - [x] Job `python` en CI: maturin build + pip install wheel + pytest
   (12 tests Python ahora en CI; el de datos reales hace pytest.skip).
 
+## WASM (2026-06-14) — patrón multi-target COMPLETO
+`crates/downscale-wasm` (wasm-bindgen, convención surtgis-wasm): expone
+QuantileMapping, QuantileDeltaMapping y métricas (rmse/ksStatistic/meanBias)
+a JS; series como Float64Array. Binario ~74 KB. Demo en navegador
+`www/index.html` (genera clima sintético + sesgo, corrige con EQM, grafica
+las 3 CDFs empíricas + métricas raw vs corregido en canvas puro, sin libs).
+Verificada por screenshot: KS 0.287→0.001, sesgo 2.98→0.00. Build:
+`wasm-pack build --target web --out-dir pkg crates/downscale-wasm` (pkg/
+gitignoreado). CI: job `wasm` con wasm-pack. **Superficies: core+CLI+Python+WASM.**
+
 ## Próximos pasos al retomar
 1. **Software paper EMS** (próximo gran hito): outline calibrado con
    `/paper-review-ems`; figuras (paridad vs xsdba, caso Quinta Normal,
-   tabla de predictores, performance, cadena hazard); draft. Todo el
-   material ya existe en docs/ (parity, predictors, forcing-interface,
-   performance).
-2. Pulido restante: WASM (demo navegador, completa multi-target); paridad
-   QM paramétrico vs xsdba/scipy.
+   tabla de predictores, performance, cadena hazard, demo WASM); draft.
+   Todo el material ya existe en docs/.
+2. Pulido restante menor: paridad QM paramétrico vs xsdba/scipy; actualizar
+   GH actions a Node24.
 3. v0.2 extensiones: MBCn multivariado iterativo; QDM por ventanas;
    forzantes multi-sitio para rainflow semi-distribuido; validación con GCM
    real CMIP6 (Open-Meteo Climate API).

@@ -60,6 +60,8 @@ flow. QDM is similar (1.9 ms). Details, microbenchmarks and methodology:
   reader: headers, NA, DGA/CR2 `-9999` sentinels).
 - `crates/downscale-python` — PyO3 bindings (`downscale_rs` module):
   numpy-in/numpy-out for every method, built with maturin.
+- `crates/downscale-wasm` — WebAssembly bindings (~74 KB) with a
+  browser demo: bias correction with no server. See its README.
 
 ## Quick start
 

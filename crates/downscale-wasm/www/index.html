@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>downscale-rs · demo WASM</title>
+    <style>
+      :root { --ink: #1a1a1a; --obs: #111; --raw: #d1495b; --corr: #2978a0; --bg: #fafafa; }
+      * { box-sizing: border-box; }
+      body {
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--ink); background: var(--bg); margin: 0; padding: 2rem;
+        max-width: 880px; margin-inline: auto;
+      }
+      h1 { font-size: 1.4rem; margin: 0 0 .2rem; }
+      .sub { color: #666; margin: 0 0 1.5rem; }
+      .controls { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: end;
+        padding: 1rem; background: #fff; border: 1px solid #e3e3e3; border-radius: 8px; }
+      label { display: flex; flex-direction: column; font-size: .8rem; color: #555; gap: .3rem; }
+      input, select { font: inherit; padding: .35rem .5rem; border: 1px solid #ccc; border-radius: 5px; }
+      input[type=range] { padding: 0; }
+      button { font: inherit; font-weight: 600; padding: .5rem 1rem; cursor: pointer;
+        background: var(--corr); color: #fff; border: 0; border-radius: 6px; }
+      button:hover { background: #1f5f80; }
+      canvas { width: 100%; height: 340px; background: #fff;
+        border: 1px solid #e3e3e3; border-radius: 8px; margin-top: 1.2rem; }
+      table { border-collapse: collapse; margin-top: 1.2rem; width: 100%; }
+      th, td { text-align: right; padding: .4rem .7rem; border-bottom: 1px solid #eee; }
+      th:first-child, td:first-child { text-align: left; }
+      thead th { border-bottom: 2px solid #ddd; font-size: .85rem; }
+      .legend { display: flex; gap: 1.5rem; margin-top: .8rem; font-size: .85rem; }
+      .sw { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: .4rem; }
+      code { background: #eee; padding: .1rem .3rem; border-radius: 3px; }
+      .err { color: var(--raw); font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>downscale-rs — corrección de sesgo en el navegador</h1>
+    <p class="sub">
+      El mismo motor Rust, compilado a WebAssembly (~74&nbsp;KB, sin servidor).
+      Genera un clima sintético "observado", un "modelo" con sesgo, y aplica
+      quantile mapping empírico (EQM).
+    </p>
+
+    <div class="controls">
+      <label>Tipo
+        <select id="kind">
+          <option value="add">Aditivo (temperatura)</option>
+          <option value="mult">Multiplicativo (precipitación)</option>
+        </select>
+      </label>
+      <label>Sesgo de media: <span id="biasv">+3.0</span>
+        <input id="bias" type="range" min="-5" max="8" step="0.5" value="3" />
+      </label>
+      <label>Factor de varianza: <span id="scalev">1.3</span>
+        <input id="scale" type="range" min="0.6" max="2" step="0.1" value="1.3" />
+      </label>
+      <label>Muestras: <span id="nv">3000</span>
+        <input id="n" type="range" min="300" max="8000" step="100" value="3000" />
+      </label>
+      <button id="run">Regenerar y corregir</button>
+    </div>
+
+    <canvas id="cdf" width="1600" height="680"></canvas>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--obs)"></span>observado</span>
+      <span><span class="sw" style="background:var(--raw)"></span>modelo (crudo)</span>
+      <span><span class="sw" style="background:var(--corr)"></span>corregido (EQM)</span>
+    </div>
+
+    <table>
+      <thead><tr><th>métrica vs observado</th><th>modelo crudo</th><th>corregido</th></tr></thead>
+      <tbody id="metrics"></tbody>
+    </table>
+
+    <p class="sub" style="margin-top:1.5rem">
+      API: <code>new QuantileMapping(obs, model, nQ, kind, nodes)</code> ·
+      <code>.apply(series)</code> · <code>rmse</code>, <code>ksStatistic</code>,
+      <code>meanBias</code>. También expone <code>QuantileDeltaMapping</code>.
+    </p>
+
+    <script type="module">
+      import init, {
+        QuantileMapping, rmse, ksStatistic, meanBias,
+      } from "../pkg/downscale_wasm.js";
+
+      // --- generación de datos sintéticos (determinista por simplicidad) ---
+      let seed = 12345;
+      function rand() { // LCG en (0,1)
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return (seed + 0.5) / 4294967296;
+      }
+      function randn() { // Box–Muller
+        return Math.sqrt(-2 * Math.log(rand())) * Math.cos(2 * Math.PI * rand());
+      }
+      function makeData(kind, bias, scale, n) {
+        const obs = new Float64Array(n), model = new Float64Array(n);
+        for (let i = 0; i < n; i++) {
+          if (kind === "mult") {
+            // Precipitación: 65% seco, lluvia exponencial.
+            const u = rand();
+            const o = u < 0.65 ? 0 : -6 * Math.log(1 - (u - 0.65) / 0.35);
+            obs[i] = o;
+            model[i] = o * scale * bias_to_factor(bias); // sesgo multiplicativo
+          } else {
+            const o = 15 + 4 * randn();
+            obs[i] = o;
+            model[i] = (o - 15) * scale + 15 + bias; // sesgo aditivo + varianza
+          }
+        }
+        return { obs, model };
+      }
+      function bias_to_factor(bias) { return Math.max(0.3, 1 + bias / 6); }
+
+      // --- CDF empírica para graficar ---
+      function cdf(arr) {
+        const s = Float64Array.from(arr).sort();
+        return { x: s, p: s.map((_, i) => (i + 0.5) / s.length) };
+      }
+
+      function draw(obs, raw, corr) {
+        const c = document.getElementById("cdf");
+        const ctx = c.getContext("2d");
+        const W = c.width, H = c.height, pad = 60;
+        ctx.clearRect(0, 0, W, H);
+        const all = [...obs, ...raw, ...corr];
+        const xmin = Math.min(...all), xmax = Math.max(...all);
+        const sx = (x) => pad + (x - xmin) / (xmax - xmin || 1) * (W - 2 * pad);
+        const sy = (p) => H - pad - p * (H - 2 * pad);
+        // ejes
+        ctx.strokeStyle = "#ddd"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(pad, sy(0)); ctx.lineTo(W - pad, sy(0)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(pad, sy(0)); ctx.lineTo(pad, sy(1)); ctx.stroke();
+        ctx.fillStyle = "#888"; ctx.font = "22px sans-serif";
+        ctx.fillText("F(x)", 12, sy(0.5)); ctx.fillText("valor", W / 2, H - 16);
+        const line = (data, color) => {
+          const { x, p } = cdf(data);
+          ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath();
+          for (let i = 0; i < x.length; i++) {
+            const px = sx(x[i]), py = sy(p[i]);
+            i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+        };
+        line(raw, "#d1495b"); line(corr, "#2978a0"); line(obs, "#111");
+      }
+
+      function row(name, a, b, fmt = (v) => v.toFixed(3)) {
+        return `<tr><td>${name}</td><td>${fmt(a)}</td><td>${fmt(b)}</td></tr>`;
+      }
+
+      function run() {
+        const kind = document.getElementById("kind").value;
+        const bias = +document.getElementById("bias").value;
+        const scale = +document.getElementById("scale").value;
+        const n = +document.getElementById("n").value;
+        const tbody = document.getElementById("metrics");
+        try {
+          seed = 12345;
+          const { obs, model } = makeData(kind, bias, scale, n);
+          const qm = new QuantileMapping(obs, model, 100, kind, "midpoint");
+          const corr = qm.apply(model);
+          draw(obs, model, corr);
+          tbody.innerHTML =
+            row("KS", ksStatistic(model, obs), ksStatistic(corr, obs), (v) => v.toFixed(4)) +
+            row("sesgo medio", meanBias(model, obs), meanBias(corr, obs)) +
+            row("RMSE", rmse(model, obs), rmse(corr, obs));
+          qm.free();
+        } catch (e) {
+          tbody.innerHTML = `<tr><td colspan="3" class="err">${e}</td></tr>`;
+        }
+      }
+
+      for (const id of ["bias", "scale", "n"]) {
+        const el = document.getElementById(id);
+        const out = document.getElementById(id + "v");
+        const fmt = id === "bias" ? (v) => (v >= 0 ? "+" : "") + (+v).toFixed(1) : (v) => v;
+        el.addEventListener("input", () => (out.textContent = fmt(el.value)));
+      }
+      document.getElementById("run").addEventListener("click", run);
+
+      await init();
+      run();
+    </script>
+  </body>
+</html>

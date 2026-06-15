@@ -43,3 +43,16 @@ jobs:
         run: pip install dist/*.whl
       - name: Pytest
         run: pytest crates/downscale-python/tests/ -v
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Instalar wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Construir wasm
+        run: wasm-pack build --target web --out-dir pkg crates/downscale-wasm

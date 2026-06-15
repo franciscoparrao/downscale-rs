@@ -1,10 +1,16 @@
 [workspace]
 resolver = "3"
-members = ["crates/downscale-core", "crates/downscale-cli", "crates/downscale-python"]
+members = [
+    "crates/downscale-core",
+    "crates/downscale-cli",
+    "crates/downscale-python",
+    "crates/downscale-wasm",
+]
 
 [workspace.dependencies]
 pyo3 = { version = "0.23", features = ["extension-module"] }
 numpy = "0.23"
+wasm-bindgen = "0.2"
 
 [workspace.package]
 version = "0.1.0"
