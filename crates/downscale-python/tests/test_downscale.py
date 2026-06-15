@@ -132,8 +132,9 @@ def test_real_data_matches_rust_cli():
 
     base = os.path.join(os.path.dirname(__file__), "../../../data/parity")
     if not os.path.isdir(base):
-        print("  (data/parity no disponible — test de datos reales omitido)")
-        return
+        import pytest
+
+        pytest.skip("data/parity no disponible")
     load = lambda n: np.loadtxt(
         os.path.join(base, f"{n}.csv"), delimiter=",", skiprows=1, usecols=1
     )
@@ -147,7 +148,16 @@ def test_real_data_matches_rust_cli():
 
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+    passed = skipped = 0
     for t in tests:
-        t()
-        print(f"✓ {t.__name__}")
-    print(f"\n{len(tests)} tests OK")
+        try:
+            t()
+            print(f"✓ {t.__name__}")
+            passed += 1
+        except Exception as e:  # pytest.skip lanza Skipped fuera de pytest
+            if type(e).__name__ == "Skipped":
+                print(f"– {t.__name__} (omitido: {e})")
+                skipped += 1
+            else:
+                raise
+    print(f"\n{passed} OK, {skipped} omitidos")

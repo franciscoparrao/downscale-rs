@@ -4,15 +4,17 @@ mod series;
 
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
+use downscale_core::analog::AnalogDownscaling;
 use downscale_core::forcing::{ForcingSeries, ForcingSet, Variable};
 use downscale_core::qdm::QuantileDeltaMapping;
 use downscale_core::qm::{Kind, NodePlacement, QuantileMapping};
+use downscale_core::regression::LinearDownscaling;
 use downscale_core::validation::{QmOptions, validate_split_with};
 use downscale_core::wetday::WetDayCorrection;
 
-use series::{Series, pair_by_date};
+use series::{Matrix, Series, pair_by_date, pair_matrix_series};
 
 #[derive(Parser)]
 #[command(
@@ -143,6 +145,44 @@ enum Command {
         #[arg(short, long)]
         output: PathBuf,
     },
+    /// Downscaling por análogos: k-NN sobre predictores de gran escala
+    /// (CSV `date,col1,col2,...`) calibrado contra observaciones locales.
+    Analog {
+        /// CSV de predictores de calibración (`date,col1,...`).
+        #[arg(long)]
+        predictors: PathBuf,
+        /// CSV de observaciones locales (fecha,valor).
+        #[arg(long)]
+        obs: PathBuf,
+        /// CSV de predictores a predecir. Si se omite, se usa `--predictors`.
+        #[arg(long)]
+        target: Option<PathBuf>,
+        /// Número de análogos.
+        #[arg(long, default_value_t = 10)]
+        k: usize,
+        /// Ruta del CSV de salida (date,value).
+        #[arg(short, long)]
+        output: PathBuf,
+    },
+    /// Downscaling por regresión lineal múltiple (OLS) sobre predictores
+    /// de gran escala calibrada contra observaciones locales.
+    Regress {
+        /// CSV de predictores de calibración (`date,col1,...`).
+        #[arg(long)]
+        predictors: PathBuf,
+        /// CSV de observaciones locales (fecha,valor).
+        #[arg(long)]
+        obs: PathBuf,
+        /// CSV de predictores a predecir. Si se omite, se usa `--predictors`.
+        #[arg(long)]
+        target: Option<PathBuf>,
+        /// Trunca las predicciones a >= 0 (p. ej. precipitación).
+        #[arg(long)]
+        non_negative: bool,
+        /// Ruta del CSV de salida (date,value).
+        #[arg(short, long)]
+        output: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -263,7 +303,89 @@ fn main() -> Result<()> {
             );
             Ok(())
         }
+        Command::Analog {
+            predictors,
+            obs,
+            target,
+            k,
+            output,
+        } => {
+            let (cal_data, n_features, obs_cal, tgt) =
+                downscale_inputs(&predictors, &obs, target.as_deref())?;
+            let model = AnalogDownscaling::fit(&cal_data, n_features, &obs_cal, k)?;
+            let pred = model.predict(&tgt.data)?;
+            write_predictions(&output, &tgt.dates, &pred)?;
+            eprintln!(
+                "escrito {} ({} predicciones, k={k}, {n_features} predictores)",
+                output.display(),
+                pred.len()
+            );
+            Ok(())
+        }
+        Command::Regress {
+            predictors,
+            obs,
+            target,
+            non_negative,
+            output,
+        } => {
+            let (cal_data, n_features, obs_cal, tgt) =
+                downscale_inputs(&predictors, &obs, target.as_deref())?;
+            let model = LinearDownscaling::fit(&cal_data, n_features, &obs_cal)?;
+            let mut pred = model.predict(&tgt.data)?;
+            if non_negative {
+                for v in &mut pred {
+                    *v = v.max(0.0);
+                }
+            }
+            write_predictions(&output, &tgt.dates, &pred)?;
+            eprintln!(
+                "escrito {} ({} predicciones, R²cal={:.3}, {n_features} predictores)",
+                output.display(),
+                pred.len(),
+                model.r2()
+            );
+            Ok(())
+        }
     }
+}
+
+/// Carga predictores + observaciones, los parea por fecha, y resuelve el
+/// target (otra matriz o los propios predictores), verificando que sus
+/// columnas coincidan con las de calibración.
+fn downscale_inputs(
+    predictors: &std::path::Path,
+    obs: &std::path::Path,
+    target: Option<&std::path::Path>,
+) -> Result<(Vec<f64>, usize, Vec<f64>, Matrix)> {
+    let pred_m = Matrix::read_csv(predictors)?;
+    let obs_s = Series::read_csv(obs)?;
+    let (cal_data, n_features, obs_cal) = pair_matrix_series(&pred_m, &obs_s)?;
+
+    let tgt = match target {
+        Some(p) => {
+            let t = Matrix::read_csv(p)?;
+            if t.columns != pred_m.columns {
+                bail!(
+                    "las columnas del target {:?} no coinciden con las de calibración {:?}",
+                    t.columns,
+                    pred_m.columns
+                );
+            }
+            t
+        }
+        None => pred_m,
+    };
+    Ok((cal_data, n_features, obs_cal, tgt))
+}
+
+/// Escribe un CSV `date,value` con 3 decimales.
+fn write_predictions(output: &std::path::Path, dates: &[String], values: &[f64]) -> Result<()> {
+    let mut out = String::from("date,value\n");
+    for (d, v) in dates.iter().zip(values) {
+        out.push_str(&format!("{d},{v:.3}\n"));
+    }
+    std::fs::write(output, out).with_context(|| format!("no se pudo escribir {}", output.display()))
 }
 
 fn print_report(report: &downscale_core::ValidationReport, dates: &[String]) {

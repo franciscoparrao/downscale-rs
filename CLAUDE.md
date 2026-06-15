@@ -146,12 +146,24 @@ test, build release — secuencia verificada localmente. LICENSE-MIT +
 LICENSE-APACHE, README.md en inglés (cara pública / paper EMS).
 **Sin remote aún** — crear con `gh repo create franciscoparrao/downscale-rs`.
 
+## Pulido técnico (2026-06-14)
+- [x] CLI `analog`/`regress`: downscaling por análogos/regresión sobre
+  matriz de predictores (`date,col1,...`); lector `Matrix` + `pair_matrix_series`
+  en series.rs; flag `--non-negative` para regresión de precipitación.
+- [x] Property tests (`tests/properties.rs`, proptest): QM monótono, KS en
+  [0,1] y auto-cero, sesgo medio antisimétrico, Schaake preserva marginales,
+  parse/format de fecha roundtrip. 93 tests Rust en total.
+- [x] Job `python` en CI: maturin build + pip install wheel + pytest
+  (12 tests Python ahora en CI; el de datos reales hace pytest.skip).
+
 ## Próximos pasos al retomar
 1. **Software paper EMS** (próximo gran hito): outline calibrado con
    `/paper-review-ems`; figuras (paridad vs xsdba, caso Quinta Normal,
-   tabla de predictores/`docs/predictors.md`, esquema cadena hazard);
-   draft. Todo el material ya existe en docs/.
-2. Pulido: WASM (demo navegador); CLI para análogos/regresión; job de
-   maturin/pytest en CI; paridad QM paramétrico vs xsdba/scipy.
+   tabla de predictores, performance, cadena hazard); draft. Todo el
+   material ya existe en docs/ (parity, predictors, forcing-interface,
+   performance).
+2. Pulido restante: WASM (demo navegador, completa multi-target); paridad
+   QM paramétrico vs xsdba/scipy.
 3. v0.2 extensiones: MBCn multivariado iterativo; QDM por ventanas;
-   forzantes multi-sitio para rainflow semi-distribuido.
+   forzantes multi-sitio para rainflow semi-distribuido; validación con GCM
+   real CMIP6 (Open-Meteo Climate API).
