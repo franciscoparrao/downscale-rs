@@ -59,8 +59,14 @@ el overhead real del stack xarray/dask. Demuestra el sello del portafolio
   (−13%); análogos k=1 + synoptic da el MEJOR KS de la tabla (0.0058 <
   EQM 0.0179); regresión mejor RMSE (3.03) pero colapsa varianza (KS 0.54).
   Confirma trade-off RMSE↔distribución, accionable. Tabla lista para paper.
-- [ ] Pendiente v0.2: MBCn si se necesita multivariado iterativo;
-  aplicación por ventanas de QDM.
+- [x] **QDM por ventanas** (`qdm.rs::apply_windowed`): CDF de proyección por
+  bloque no solapado, para escenarios largos no estacionarios. Test verifica
+  que captura regímenes de cambio distintos por ventana.
+- [x] **MBCn** (`mbcn.rs`, Cannon 2018): corrección multivariada iterativa
+  (marginales QM + dependencia completa vía rotaciones ortogonales aleatorias
+  + Schaake final). PRNG PCG y álgebra propios (sin deps). Determinista por
+  seed. Test: recupera correlación de obs (Δ<0.1) y marginales (KS<0.06).
+  Bindings Python (`mbcn`, `apply_windowed`). 80 tests lib + 14 Python.
 
 ## Alcance MVP (v0.1) — COMPLETO
 - [x] Bias correction: quantile mapping empírico (aditivo/multiplicativo, nodos endpoints/midpoint), paramétrico (normal y gamma mixta con masa en cero), delta change, adaptación de umbral seco/húmedo.

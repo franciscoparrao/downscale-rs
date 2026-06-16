@@ -181,6 +181,22 @@ impl QuantileDeltaMapping {
             .map_err(err)?
             .into_pyarray(py))
     }
+
+    /// Corrige por ventanas no solapadas de `window` días (CDF de la
+    /// proyección estimada por bloque; para escenarios largos).
+    #[pyo3(name = "apply_windowed")]
+    fn apply_windowed<'py>(
+        &self,
+        py: Python<'py>,
+        proj: PyReadonlyArray1<'_, f64>,
+        window: usize,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        Ok(self
+            .inner
+            .apply_windowed(proj.as_slice()?, window)
+            .map_err(err)?
+            .into_pyarray(py))
+    }
 }
 
 /// Delta change: perturba observaciones con la señal de cambio del modelo.
@@ -367,6 +383,39 @@ fn schaake_shuffle<'py>(
     Ok(arr.into_pyarray(py))
 }
 
+/// MBCn (Cannon 2018): corrección multivariada de marginales y dependencia.
+/// `obs` y `model` son 2D (filas = días, columnas = variables); devuelve
+/// `model` corregido. Determinista por `seed`.
+#[pyfunction]
+#[pyo3(signature = (obs, model, n_iterations=30, n_quantiles=100, seed=42))]
+fn mbcn<'py>(
+    py: Python<'py>,
+    obs: PyReadonlyArray2<'_, f64>,
+    model: PyReadonlyArray2<'_, f64>,
+    n_iterations: usize,
+    n_quantiles: usize,
+    seed: u64,
+) -> PyResult<Bound<'py, numpy::PyArray2<f64>>> {
+    use numpy::ndarray::Array2;
+    let (flat_o, n_vars) = flatten_2d(&obs);
+    let (flat_m, n_vars_m) = flatten_2d(&model);
+    if n_vars != n_vars_m {
+        return Err(PyValueError::new_err(format!(
+            "obs tiene {n_vars} columnas y model {n_vars_m}"
+        )));
+    }
+    let opts = core::MbcnOptions {
+        n_iterations,
+        n_quantiles,
+        seed,
+    };
+    let out = core::mbcn(&flat_o, &flat_m, n_vars, &opts).map_err(err)?;
+    let rows = out.len() / n_vars;
+    let arr = Array2::from_shape_vec((rows, n_vars), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(arr.into_pyarray(py))
+}
+
 /// PET de Hargreaves (mm/día) con radiación extraterrestre FAO-56.
 /// `days_of_year`: día del año (1..=366) por paso; `latitude_deg`: sur negativo.
 #[pyfunction]
@@ -479,6 +528,7 @@ fn downscale_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AnalogDownscaling>()?;
     m.add_class::<LinearDownscaling>()?;
     m.add_function(wrap_pyfunction!(schaake_shuffle, m)?)?;
+    m.add_function(wrap_pyfunction!(mbcn, m)?)?;
     m.add_function(wrap_pyfunction!(hargreaves, m)?)?;
     m.add_function(wrap_pyfunction!(rmse, m)?)?;
     m.add_function(wrap_pyfunction!(mean_bias, m)?)?;

@@ -12,8 +12,12 @@ single-binary, no GDAL/Python chain.
 - Parametric quantile mapping: normal (temperature) and zero-inflated
   gamma mixture (precipitation — corrects wet-day frequency and intensity
   simultaneously; gamma fitted by maximum likelihood).
+- Quantile delta mapping (Cannon 2015), with a windowed variant for
+  long, drifting scenarios.
 - Delta change (additive/multiplicative perturbation of observations).
 - Wet-day frequency correction by threshold adaptation (Themeßl et al. 2012).
+- Multivariate: Schaake shuffle (Clark et al. 2004) and MBCn (Cannon
+  2018) — iterative correction of the full dependence structure.
 
 **Downscaling**
 - Analog method: standardized k-NN over large-scale predictors,

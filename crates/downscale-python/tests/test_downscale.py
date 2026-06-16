@@ -126,6 +126,32 @@ def test_hargreaves_fao56():
     assert 4.0 <= pet[0] <= 8.0
 
 
+def test_qdm_windowed():
+    obs = 10.0 + 5.0 * rng.uniform(size=2000)
+    hist = obs + 2.0
+    qdm = ds.QuantileDeltaMapping(obs, hist, n_quantiles=100, kind="add")
+    # Proyección no estacionaria: dos regímenes de cambio.
+    proj = np.concatenate([hist[:1000] + 1.0, hist[1000:] + 9.0])
+    w = qdm.apply_windowed(proj, 1000)
+    assert abs(w[:1000].mean() - (obs.mean() + 1.0)) < 0.2
+    assert abs(w[1000:].mean() - (obs.mean() + 9.0)) < 0.2
+
+
+def test_mbcn_recovers_dependence():
+    n = 3000
+    z1, z2 = rng.standard_normal(n), rng.standard_normal(n)
+    w1, w2 = rng.standard_normal(n), rng.standard_normal(n)
+    obs = np.column_stack([10 + 2 * z1, 20 + 0.8 * 3 * z1 + 0.6 * 3 * z2])
+    model = np.column_stack([13 + 3 * w1, 17 - 0.3 * 4 * w1 + 0.95 * 4 * w2])
+    out = ds.mbcn(obs, model, n_iterations=30, seed=42)
+    corr = lambda m: np.corrcoef(m[:, 0], m[:, 1])[0, 1]
+    # La correlación corregida se acerca a la observada.
+    assert abs(corr(out) - corr(obs)) < 0.12
+    # Determinismo.
+    out2 = ds.mbcn(obs, model, seed=42)
+    assert np.array_equal(out, out2)
+
+
 def test_real_data_matches_rust_cli():
     """Paridad bindings vs CLI sobre el caso Quinta Normal (si hay datos)."""
     import os

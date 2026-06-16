@@ -102,28 +102,63 @@ impl QuantileDeltaMapping {
     pub fn apply(&self, proj: &[f64]) -> Result<Vec<f64>> {
         check_series("proj", proj, MIN_FIT_LEN)?;
         let proj_q = empirical_quantiles(proj, &self.probs);
-
         Ok(proj
             .iter()
-            .map(|&x| {
-                // Probabilidad de no-excedencia en la CDF de la proyección.
-                let p = interp(&proj_q, &self.probs, x);
-                let obs_at_p = interp(&self.probs, &self.obs_q, p);
-                let hist_at_p = interp(&self.probs, &self.hist_q, p);
-                match self.kind {
-                    Kind::Additive => obs_at_p + (x - hist_at_p),
-                    Kind::Multiplicative => {
-                        if hist_at_p == 0.0 {
-                            // Cola seca degenerada: sin razón definida, se
-                            // conserva el cuantil observado (delta = 1).
-                            obs_at_p
-                        } else {
-                            obs_at_p * (x / hist_at_p)
-                        }
-                    }
-                }
-            })
+            .map(|&x| self.correct_value(x, &proj_q))
             .collect())
+    }
+
+    /// Corrige por **ventanas no solapadas** de `window` días: la CDF de la
+    /// proyección se estima dentro de cada bloque, capturando el cambio
+    /// temporal de la distribución (recomendado para escenarios largos, p.
+    /// ej. ventanas de 30 años, donde la CDF global mezclaría climas muy
+    /// distintos). Un bloque final con menos de 2 días reusa la CDF global.
+    ///
+    /// # Errors
+    ///
+    /// [`DownscaleError::SeriesTooShort`] / [`DownscaleError::NonFinite`], o
+    /// `window < 2`.
+    pub fn apply_windowed(&self, proj: &[f64], window: usize) -> Result<Vec<f64>> {
+        check_series("proj", proj, MIN_FIT_LEN)?;
+        if window < MIN_FIT_LEN {
+            return Err(DownscaleError::InvalidParameter {
+                name: "window",
+                value: window as f64,
+                expected: ">= 2",
+            });
+        }
+        let global_q = empirical_quantiles(proj, &self.probs);
+        let mut out = Vec::with_capacity(proj.len());
+        for block in proj.chunks(window) {
+            let block_q = if block.len() >= MIN_FIT_LEN {
+                empirical_quantiles(block, &self.probs)
+            } else {
+                global_q.clone()
+            };
+            out.extend(block.iter().map(|&x| self.correct_value(x, &block_q)));
+        }
+        Ok(out)
+    }
+
+    /// Aplica la transformación QDM a un valor dada la CDF `proj_q` de la
+    /// proyección (estimada global o por ventana).
+    fn correct_value(&self, x: f64, proj_q: &[f64]) -> f64 {
+        // Probabilidad de no-excedencia en la CDF de la proyección.
+        let p = interp(proj_q, &self.probs, x);
+        let obs_at_p = interp(&self.probs, &self.obs_q, p);
+        let hist_at_p = interp(&self.probs, &self.hist_q, p);
+        match self.kind {
+            Kind::Additive => obs_at_p + (x - hist_at_p),
+            Kind::Multiplicative => {
+                if hist_at_p == 0.0 {
+                    // Cola seca degenerada: sin razón definida, se conserva
+                    // el cuantil observado (delta = 1).
+                    obs_at_p
+                } else {
+                    obs_at_p * (x / hist_at_p)
+                }
+            }
+        }
     }
 
     /// Número de cuantiles de la CDF empírica.
@@ -256,5 +291,37 @@ mod tests {
         assert!(QuantileDeltaMapping::fit(&[1.0], &s, 10, Kind::Additive).is_err());
         let qdm = QuantileDeltaMapping::fit(&s, &s, 3, Kind::Additive).unwrap();
         assert!(qdm.apply(&[f64::NAN, 1.0]).is_err());
+    }
+
+    #[test]
+    fn windowed_with_full_window_equals_global() {
+        let obs: Vec<f64> = uniform(2, 1000).iter().map(|u| 10.0 + 8.0 * u).collect();
+        let hist: Vec<f64> = obs.iter().map(|v| v + 2.0).collect();
+        let proj: Vec<f64> = hist.iter().map(|v| v + 3.0).collect();
+        let qdm = QuantileDeltaMapping::fit(&obs, &hist, 100, Kind::Additive).unwrap();
+        let global = qdm.apply(&proj).unwrap();
+        let windowed = qdm.apply_windowed(&proj, proj.len()).unwrap();
+        for (a, b) in global.iter().zip(&windowed) {
+            assert!((a - b).abs() < 1e-12);
+        }
+        assert!(qdm.apply_windowed(&proj, 1).is_err());
+    }
+
+    #[test]
+    fn windowed_tracks_drifting_distribution() {
+        // Proyección no estacionaria: primera mitad fría, segunda caliente.
+        // La ventana captura cada régimen; la global los mezcla.
+        let obs: Vec<f64> = uniform(5, 2000).iter().map(|u| 10.0 + 5.0 * u).collect();
+        let hist: Vec<f64> = obs.iter().map(|v| v + 2.0).collect(); // sesgo +2
+        let qdm = QuantileDeltaMapping::fit(&obs, &hist, 100, Kind::Additive).unwrap();
+
+        let mut proj: Vec<f64> = (0..1000).map(|i| hist[i] + 1.0).collect(); // +1 de cambio
+        proj.extend((1000..2000).map(|i| hist[i] + 9.0)); // +9 de cambio
+
+        let w = qdm.apply_windowed(&proj, 1000).unwrap();
+        let mean = |s: &[f64]| s.iter().sum::<f64>() / s.len() as f64;
+        // Cada ventana preserva su señal de cambio (1 y 9) sin el sesgo (2).
+        assert!((mean(&w[..1000]) - (mean(&obs) + 1.0)).abs() < 0.2);
+        assert!((mean(&w[1000..]) - (mean(&obs) + 9.0)).abs() < 0.2);
     }
 }
