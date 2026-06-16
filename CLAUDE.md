@@ -156,6 +156,19 @@ LICENSE-APACHE, README.md en inglés (cara pública / paper EMS).
 - [x] Job `python` en CI: maturin build + pip install wheel + pytest
   (12 tests Python ahora en CI; el de datos reales hace pytest.skip).
 
+## Validación con GCMs reales CMIP6 (2026-06-15) — `docs/gcm-validation.md`
+4 GCMs CMIP6 (MRI-AGCM3-2-S, EC-Earth3P-HR, MPI-ESM1-2-XR, CMCC-CM2-VHR4)
+vía Open-Meteo Climate API. Cierra la brecha: el motor probado con su caso
+de uso declarado (GCM→local, no solo reanálisis). **Metodología
+distribucional** (un GCM no asimila datos → no se parea día a día → solo
+KS/sesgo/frecuencia, no RMSE; split por período 1950-99/2000-18). Hallazgos:
+(1) drizzle bias universal — todos sobreestiman días húmedos (14-25% vs 10%
+obs), el QM corrige a ~10%; (2) el motor corrige los 4 GCMs tan bien como
+ERA5 (KS val 0.008-0.018); (3) sesgo corregido levemente negativo = misma
+no-estacionariedad (megasequía post-2010). Limitación honesta: los CMIP6 de
+Open-Meteo (HighResMIP) ya vienen downscaled ~10km → sesgo comparable a ERA5,
+no el de un GCM crudo (ESGF, pendiente). scripts/fetch_gcm.py + experiment_gcm.py.
+
 ## WASM (2026-06-14) — patrón multi-target COMPLETO
 `crates/downscale-wasm` (wasm-bindgen, convención surtgis-wasm): expone
 QuantileMapping, QuantileDeltaMapping y métricas (rmse/ksStatistic/meanBias)
