@@ -66,7 +66,7 @@ pub mod wetday;
 pub use analog::AnalogDownscaling;
 pub use delta::DeltaChange;
 pub use error::{DownscaleError, Result};
-pub use forcing::{ForcingSeries, ForcingSet, Variable};
+pub use forcing::{ForcingSeries, ForcingSet, Variable, areal_average};
 pub use multivariate::schaake_shuffle;
 pub use parametric::{Distribution, ParametricQuantileMapping};
 pub use pet::hargreaves;

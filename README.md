@@ -55,9 +55,10 @@ flow. QDM is similar (1.9 ms). Details, microbenchmarks and methodology:
   dependency (`thiserror`). Special functions (incomplete gamma, normal
   PPF, digamma) implemented in-crate and tested against SciPy values.
 - `crates/downscale-cli` — the `downscale` binary: `validate`, `correct`,
-  `forcing` over `date,value` CSV files, plus `analog`/`regress`
-  downscaling over `date,col1,col2,...` predictor matrices (tolerant
-  reader: headers, NA, DGA/CR2 `-9999` sentinels).
+  `forcing` and `areal` (weighted basin-average forcing) over `date,value`
+  CSV files, plus `analog`/`regress` downscaling over `date,col1,col2,...`
+  predictor matrices (tolerant reader: headers, NA, DGA/CR2 `-9999`
+  sentinels).
 - `crates/downscale-python` — PyO3 bindings (`downscale_rs` module):
   numpy-in/numpy-out for every method, built with maturin.
 - `crates/downscale-wasm` — WebAssembly bindings (~74 KB) with a

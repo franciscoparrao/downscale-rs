@@ -13,6 +13,17 @@ Tienes carpetas `downscaling` y `super-resolution-dem` pero no un motor
 operacional. El campo es scripts Python dispersos (xclim, cmethods). Rust lo
 hace determinista y batch-friendly para muchos puntos/grillas.
 
+## Forzantes multi-sitio para rainflow (2026-06-15)
+`forcing.rs` gana `areal_average(sets, weights)`: promedio areal ponderado
+(Thiessen/área/uniforme) de N forzantes → forzante de cuenca, recortado al
+período común, mismas variables. CLI `downscale areal --forcing a.csv
+--forcing b.csv --weight 0.6 --weight 0.4 -o cuenca.csv`. Verificado e2e:
+2 sitios → areal → `rainflow run` GR4J 24.905 pasos. Dos caminos multi-sitio
+documentados en forcing-interface.md: (1) cuencas independientes →
+`rainflow batch`; (2) areal cuando una cuenca tiene varias estaciones. La
+banda de elevación NO usa esto (rainflow hbv-bands deriva bandas con
+gradientes TCALT/PCALT desde una forzante). 74 tests lib.
+
 ## k-d tree para análogos (2026-06-15)
 `analog.rs` ahora usa un k-d tree (búsqueda k-NN exacta, sin deps) en vez de
 fuerza bruta. Microbenchmark análogos k=10 predict: 1.14 s → 283 ms (~4× en

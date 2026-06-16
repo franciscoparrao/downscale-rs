@@ -62,18 +62,41 @@ Cadena completa probada con Quinta Normal: ERA5 pr corregido por EQM
 forcing` (24.905 días contiguos 1950–2018, alineación automática) →
 `rainflow run` GR4J: 24.905 pasos simulados sin errores, `qsim` escrito.
 
+## Multi-sitio
+
+Dos caminos hacia el rainflow semi-distribuido / multi-cuenca:
+
+1. **Cuencas independientes** → `rainflow batch --forcing a.csv b.csv ...`
+   (una forzante por cuenca). Se produce corrigiendo y ensamblando cada
+   sitio por separado (`correct` + `forcing`), una vez por cuenca.
+
+2. **Promedio areal de cuenca** → cuando una cuenca tiene varias estaciones,
+   se combinan en una sola forzante con `downscale areal`:
+
+   ```bash
+   downscale areal --forcing est1.csv --forcing est2.csv \
+     --weight 0.6 --weight 0.4 -o cuenca.csv
+   rainflow run --forcing cuenca.csv --x1 350 --x2 0 --x3 90 --x4 1.7
+   ```
+
+   Combina N forzantes (mismas variables) por media ponderada (Thiessen, por
+   área, o uniforme si se omiten los pesos), recortando al período común.
+   Verificado end-to-end: 2 sitios → `areal` → `rainflow run` GR4J, 24.905
+   pasos sin errores. La banda de elevación NO requiere esta vía: rainflow
+   `hbv-bands` deriva las bandas internamente con gradientes (TCALT/PCALT)
+   desde una sola forzante a una elevación de referencia.
+
 ## API Rust (para acople directo, sin CSV)
 
-`downscale_core::forcing` expone `Variable`, `ForcingSeries` (eje validado)
-y `ForcingSet` (alineación + `to_csv()` canónico). Cuando rainflow quiera
-consumir forzantes en memoria (PyO3 o crate a crate), el tipo de
-intercambio es `ForcingSet`; el CSV es la serialización de referencia.
+`downscale_core::forcing` expone `Variable`, `ForcingSeries` (eje validado),
+`ForcingSet` (alineación + `to_csv()` canónico) y `areal_average(sets,
+weights)` (promedio areal ponderado). Cuando rainflow quiera consumir
+forzantes en memoria (PyO3 o crate a crate), el tipo de intercambio es
+`ForcingSet`; el CSV es la serialización de referencia.
 
 ## Pendiente / v0.2
 
 - PET corregida (hoy se pasa cruda; Hargreaves desde tmin/tmax corregidas
-  sería lo propio).
-- Multi-sitio (un set por estación/celda) para lo semi-distribuido de
-  rainflow v0.2.
+  sería lo propio — ya disponible en `downscale_core::pet`).
 - Metadatos de procedencia (método de corrección, período de calibración)
   como comentario de cabecera opcional.

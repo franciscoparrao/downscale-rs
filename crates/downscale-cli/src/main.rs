@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use downscale_core::analog::AnalogDownscaling;
-use downscale_core::forcing::{ForcingSeries, ForcingSet, Variable};
+use downscale_core::forcing::{ForcingSeries, ForcingSet, Variable, areal_average};
 use downscale_core::qdm::QuantileDeltaMapping;
 use downscale_core::qm::{Kind, NodePlacement, QuantileMapping};
 use downscale_core::regression::LinearDownscaling;
@@ -183,6 +183,20 @@ enum Command {
         #[arg(short, long)]
         output: PathBuf,
     },
+    /// Promedio areal de varias forzantes (`date,pr,pet[,tmean]`) en una
+    /// forzante de cuenca, ponderado (Thiessen/área) y recortado al período
+    /// común — para alimentar un modelo lluvia-escorrentía agregado.
+    Areal {
+        /// CSV de forzante por sitio (repetir el flag por cada uno).
+        #[arg(long, required = true)]
+        forcing: Vec<PathBuf>,
+        /// Pesos por sitio (mismo orden). Si se omiten, uniformes.
+        #[arg(long)]
+        weight: Vec<f64>,
+        /// Ruta del CSV de forzante de cuenca de salida.
+        #[arg(short, long)]
+        output: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -347,7 +361,71 @@ fn main() -> Result<()> {
             );
             Ok(())
         }
+        Command::Areal {
+            forcing,
+            weight,
+            output,
+        } => {
+            let weights = if weight.is_empty() {
+                vec![1.0; forcing.len()]
+            } else if weight.len() == forcing.len() {
+                weight
+            } else {
+                bail!(
+                    "se dieron {} pesos para {} forzantes",
+                    weight.len(),
+                    forcing.len()
+                );
+            };
+            let sets: Vec<ForcingSet> = forcing
+                .iter()
+                .map(|p| read_forcing_set(p))
+                .collect::<Result<_>>()?;
+            let basin = areal_average(&sets, &weights)?;
+            std::fs::write(&output, basin.to_csv())
+                .with_context(|| format!("no se pudo escribir {}", output.display()))?;
+            eprintln!(
+                "escrito {} ({} días desde {}, {} sitios, columnas: {})",
+                output.display(),
+                basin.len(),
+                downscale_core::forcing::format_date(basin.start_day()),
+                sets.len(),
+                basin
+                    .variables()
+                    .iter()
+                    .map(|v| v.column_name())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            Ok(())
+        }
     }
+}
+
+/// Lee un CSV de forzante (`date,pr,pet[,tmean]`) como un `ForcingSet`,
+/// mapeando los nombres de columna canónicos a sus variables.
+fn read_forcing_set(path: &std::path::Path) -> Result<ForcingSet> {
+    let m = Matrix::read_csv(path)?;
+    let mut series = Vec::with_capacity(m.n_features());
+    for (j, name) in m.columns.iter().enumerate() {
+        let var = match name.as_str() {
+            "pr" => Variable::Precipitation,
+            "pet" => Variable::Pet,
+            "tmean" => Variable::TemperatureMean,
+            other => bail!(
+                "{}: columna '{other}' desconocida (esperado pr/pet/tmean)",
+                path.display()
+            ),
+        };
+        let vals: Vec<f64> = (0..m.dates.len())
+            .map(|i| m.data[i * m.n_features() + j])
+            .collect();
+        series.push(
+            ForcingSeries::from_dates(var, &m.dates, &vals)
+                .with_context(|| format!("{} ({name})", path.display()))?,
+        );
+    }
+    Ok(ForcingSet::align(series)?)
 }
 
 /// Carga predictores + observaciones, los parea por fecha, y resuelve el

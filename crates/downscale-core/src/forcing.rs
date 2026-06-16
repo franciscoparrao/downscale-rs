@@ -304,6 +304,100 @@ impl ForcingSet {
     }
 }
 
+/// Promedio areal ponderado de varios conjuntos de forzantes — p. ej.
+/// varias estaciones de una misma cuenca combinadas en una sola forzante de
+/// cuenca para un modelo lluvia-escorrentía agregado (rainflow).
+///
+/// Todos los conjuntos deben exponer las mismas variables en el mismo orden;
+/// el resultado se recorta al período común (intersección). Los pesos (no
+/// negativos, suma > 0) se normalizan internamente — sirven para pesos de
+/// Thiessen, por área de influencia, o uniformes.
+///
+/// # Errors
+///
+/// - [`DownscaleError::InvalidParameter`] si no hay conjuntos, algún peso es
+///   negativo o su suma es cero, o las variables difieren entre conjuntos.
+/// - [`DownscaleError::LengthMismatch`] si `weights.len() != sets.len()`.
+/// - [`DownscaleError::NoOverlap`] si los períodos no se solapan.
+///
+/// # Ejemplo
+///
+/// ```
+/// use downscale_core::forcing::{ForcingSeries, ForcingSet, Variable, areal_average};
+///
+/// let d: Vec<String> = ["2000-01-01", "2000-01-02"].iter().map(|s| s.to_string()).collect();
+/// let a = ForcingSet::align(vec![
+///     ForcingSeries::from_dates(Variable::Precipitation, &d, &[0.0, 10.0]).unwrap()]).unwrap();
+/// let b = ForcingSet::align(vec![
+///     ForcingSeries::from_dates(Variable::Precipitation, &d, &[4.0, 6.0]).unwrap()]).unwrap();
+///
+/// // 75% peso al sitio a, 25% al b.
+/// let basin = areal_average(&[a, b], &[3.0, 1.0]).unwrap();
+/// assert_eq!(basin.series(Variable::Precipitation).unwrap(), &[1.0, 9.0]);
+/// ```
+pub fn areal_average(sets: &[ForcingSet], weights: &[f64]) -> Result<ForcingSet> {
+    if sets.is_empty() {
+        return Err(DownscaleError::InvalidParameter {
+            name: "sets",
+            value: 0.0,
+            expected: ">= 1 conjunto",
+        });
+    }
+    if weights.len() != sets.len() {
+        return Err(DownscaleError::LengthMismatch {
+            left_name: "weights",
+            left: weights.len(),
+            right_name: "sets",
+            right: sets.len(),
+        });
+    }
+    let wsum: f64 = weights.iter().sum();
+    if weights.iter().any(|&w| w < 0.0) || wsum <= 0.0 {
+        return Err(DownscaleError::InvalidParameter {
+            name: "weights",
+            value: wsum,
+            expected: "pesos no negativos con suma > 0",
+        });
+    }
+    let vars = sets[0].variables();
+    if sets[1..].iter().any(|s| s.variables() != vars) {
+        return Err(DownscaleError::InvalidParameter {
+            name: "sets",
+            value: 0.0,
+            expected: "mismas variables (y orden) en todos los conjuntos",
+        });
+    }
+
+    let start = sets.iter().map(|s| s.start_day).max().expect("no vacío");
+    let end = sets
+        .iter()
+        .map(|s| s.start_day + s.len() as i64 - 1)
+        .min()
+        .expect("no vacío");
+    if end < start {
+        return Err(DownscaleError::NoOverlap);
+    }
+    let len = (end - start + 1) as usize;
+
+    let mut columns = Vec::with_capacity(vars.len());
+    for (vi, &var) in vars.iter().enumerate() {
+        let mut vals = vec![0.0; len];
+        for (si, s) in sets.iter().enumerate() {
+            let offset = (start - s.start_day) as usize;
+            let col = &s.columns[vi].1;
+            let w = weights[si] / wsum;
+            for (i, v) in vals.iter_mut().enumerate() {
+                *v += w * col[offset + i];
+            }
+        }
+        columns.push((var, vals));
+    }
+    Ok(ForcingSet {
+        start_day: start,
+        columns,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,5 +521,67 @@ mod tests {
             set.to_csv(),
             "date,pr,pet,tmean\n2000-01-01,0,3,14.5\n2000-01-02,5.5,3.25,15\n"
         );
+    }
+
+    fn pr_set(dates_: &[&str], values: &[f64]) -> ForcingSet {
+        let s = ForcingSeries::from_dates(Variable::Precipitation, &dates(dates_), values).unwrap();
+        ForcingSet::align(vec![s]).unwrap()
+    }
+
+    #[test]
+    fn areal_average_weights_and_normalizes() {
+        let a = pr_set(&["2000-01-01", "2000-01-02"], &[0.0, 10.0]);
+        let b = pr_set(&["2000-01-01", "2000-01-02"], &[4.0, 6.0]);
+        // Pesos 3:1 (sin normalizar) → 0.75·a + 0.25·b.
+        let basin = areal_average(&[a, b], &[3.0, 1.0]).unwrap();
+        assert_eq!(basin.series(Variable::Precipitation).unwrap(), &[1.0, 9.0]);
+    }
+
+    #[test]
+    fn areal_average_intersects_periods() {
+        let a = pr_set(
+            &["2000-01-01", "2000-01-02", "2000-01-03"],
+            &[1.0, 2.0, 3.0],
+        );
+        let b = pr_set(
+            &["2000-01-02", "2000-01-03", "2000-01-04"],
+            &[20.0, 30.0, 40.0],
+        );
+        let basin = areal_average(&[a, b], &[1.0, 1.0]).unwrap();
+        assert_eq!(basin.len(), 2);
+        assert_eq!(format_date(basin.start_day()), "2000-01-02");
+        // (2+20)/2, (3+30)/2
+        assert_eq!(
+            basin.series(Variable::Precipitation).unwrap(),
+            &[11.0, 16.5]
+        );
+    }
+
+    #[test]
+    fn areal_average_rejects_bad_input() {
+        let a = pr_set(&["2000-01-01", "2000-01-02"], &[1.0, 2.0]);
+        let b = pr_set(&["2000-01-01", "2000-01-02"], &[3.0, 4.0]);
+        // Conteo de pesos.
+        assert!(areal_average(&[a.clone(), b.clone()], &[1.0]).is_err());
+        // Pesos negativos / suma cero.
+        assert!(areal_average(&[a.clone(), b.clone()], &[-1.0, 1.0]).is_err());
+        assert!(areal_average(&[a.clone(), b.clone()], &[0.0, 0.0]).is_err());
+        // Sin solape.
+        let c = pr_set(&["2010-01-01", "2010-01-02"], &[1.0, 2.0]);
+        assert_eq!(
+            areal_average(&[a.clone(), c], &[1.0, 1.0]).unwrap_err(),
+            DownscaleError::NoOverlap
+        );
+        // Variables distintas.
+        let pet = ForcingSet::align(vec![
+            ForcingSeries::from_dates(
+                Variable::Pet,
+                &dates(&["2000-01-01", "2000-01-02"]),
+                &[1.0, 2.0],
+            )
+            .unwrap(),
+        ])
+        .unwrap();
+        assert!(areal_average(&[a, pet], &[1.0, 1.0]).is_err());
     }
 }
