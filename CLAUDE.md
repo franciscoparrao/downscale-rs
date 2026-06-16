@@ -67,6 +67,11 @@ el overhead real del stack xarray/dask. Demuestra el sello del portafolio
   + Schaake final). PRNG PCG y álgebra propios (sin deps). Determinista por
   seed. Test: recupera correlación de obs (Δ<0.1) y marginales (KS<0.06).
   Bindings Python (`mbcn`, `apply_windowed`). 80 tests lib + 14 Python.
+- [x] **Experimento MBCn datos reales** (`docs/multivariate.md`, 2026-06-16):
+  pr+temp Quinta Normal (CR2) vs ERA5, 17.793 días 1969-2018. MBCn recupera
+  la correlación pr–temp observada (−0.158): MBCn −0.175 vs QM univariado
+  −0.214 vs ERA5 crudo −0.269. Ambos corrigen marginales (KS pr 0.144→0.01-0.02).
+  Demuestra que el univariado NO corrige la dependencia y MBCn sí.
 
 ## Alcance MVP (v0.1) — COMPLETO
 - [x] Bias correction: quantile mapping empírico (aditivo/multiplicativo, nodos endpoints/midpoint), paramétrico (normal y gamma mixta con masa en cero), delta change, adaptación de umbral seco/húmedo.
