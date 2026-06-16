@@ -4,8 +4,9 @@
 //! observaciones de esos análogos, ponderada por distancia inversa.
 //!
 //! Los predictores se estandarizan (z-score) con las estadísticas del
-//! archivo y se comparan con distancia euclidiana. Búsqueda por fuerza
-//! bruta: O(n) por consulta, suficiente para series diarias (~10⁴ días).
+//! archivo y se comparan con distancia euclidiana. La búsqueda de los `k`
+//! vecinos usa un k-d tree (O(log n) promedio por consulta), exacto: da
+//! el mismo conjunto de análogos que la fuerza bruta.
 
 use crate::error::{DownscaleError, Result, check_series};
 
@@ -40,10 +41,8 @@ pub struct AnalogDownscaling {
     /// Desviación por feature; features constantes quedan con 1.0
     /// (no discriminan, distancia 0).
     sds: Vec<f64>,
-    /// Archivo estandarizado, aplanado por filas.
-    archive: Vec<f64>,
-    /// Observaciones locales del archivo.
-    obs: Vec<f64>,
+    /// k-d tree sobre el archivo estandarizado.
+    tree: KdTree,
 }
 
 impl AnalogDownscaling {
@@ -84,7 +83,7 @@ impl AnalogDownscaling {
             *sd = if var > 0.0 { var.sqrt() } else { 1.0 };
         }
 
-        let archive: Vec<f64> = predictors
+        let standardized: Vec<f64> = predictors
             .iter()
             .enumerate()
             .map(|(idx, &v)| {
@@ -93,14 +92,24 @@ impl AnalogDownscaling {
             })
             .collect();
 
+        let tree = KdTree::build(&standardized, obs, n_features);
+
         Ok(Self {
             n_features,
             k,
             means,
             sds,
-            archive,
-            obs: obs.to_vec(),
+            tree,
         })
+    }
+
+    /// Estandariza una consulta con las estadísticas del archivo.
+    fn standardize(&self, query: &[f64]) -> Vec<f64> {
+        query
+            .iter()
+            .zip(self.means.iter().zip(&self.sds))
+            .map(|(&v, (&m, &s))| (v - m) / s)
+            .collect()
     }
 
     /// Predice el valor local para un vector de predictores.
@@ -118,34 +127,9 @@ impl AnalogDownscaling {
                 expected: "largo == n_features",
             });
         }
-        let q: Vec<f64> = query
-            .iter()
-            .zip(self.means.iter().zip(&self.sds))
-            .map(|(&v, (&m, &s))| (v - m) / s)
-            .collect();
-
-        // Distancias a todo el archivo y selección de los k menores.
-        let rows = self.obs.len();
-        let mut dist: Vec<(f64, f64)> = (0..rows)
-            .map(|i| {
-                let row = &self.archive[i * self.n_features..(i + 1) * self.n_features];
-                let d2: f64 = row.iter().zip(&q).map(|(a, b)| (a - b).powi(2)).sum();
-                (d2, self.obs[i])
-            })
-            .collect();
-        dist.select_nth_unstable_by(self.k - 1, |a, b| {
-            a.0.partial_cmp(&b.0).expect("distancias finitas")
-        });
-
-        // Media ponderada por distancia inversa (eps evita división por 0).
-        let mut num = 0.0;
-        let mut den = 0.0;
-        for &(d2, y) in &dist[..self.k] {
-            let w = 1.0 / (d2.sqrt() + 1e-12);
-            num += w * y;
-            den += w;
-        }
-        Ok(num / den)
+        let q = self.standardize(query);
+        let neighbors = self.tree.knn(&q, self.k);
+        Ok(idw_mean(&neighbors))
     }
 
     /// Predice una secuencia de días (matriz aplanada por filas).
@@ -173,6 +157,151 @@ impl AnalogDownscaling {
     pub fn k(&self) -> usize {
         self.k
     }
+}
+
+/// Media ponderada por distancia inversa sobre vecinos `(dist², obs)`.
+/// El `eps` evita la división por cero cuando un análogo es exacto.
+fn idw_mean(neighbors: &[(f64, f64)]) -> f64 {
+    let mut num = 0.0;
+    let mut den = 0.0;
+    for &(d2, y) in neighbors {
+        let w = 1.0 / (d2.sqrt() + 1e-12);
+        num += w * y;
+        den += w;
+    }
+    num / den
+}
+
+/// k-d tree de búsqueda de vecinos más cercanos sobre puntos
+/// `n_features`-dimensionales, con el valor observado asociado a cada punto.
+#[derive(Debug, Clone)]
+struct KdTree {
+    nodes: Vec<KdNode>,
+    root: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+struct KdNode {
+    /// Coordenadas estandarizadas del punto.
+    point: Vec<f64>,
+    /// Observación local asociada.
+    obs: f64,
+    /// Eje de partición de este nodo.
+    axis: usize,
+    left: Option<usize>,
+    right: Option<usize>,
+}
+
+impl KdTree {
+    /// Construye el árbol particionando recursivamente por la mediana del
+    /// eje que rota con la profundidad (quickselect, O(n log n)).
+    fn build(points: &[f64], obs: &[f64], n_features: usize) -> Self {
+        let n = obs.len();
+        let mut indices: Vec<usize> = (0..n).collect();
+        let mut nodes = Vec::with_capacity(n);
+        let root = build_node(&mut indices, points, obs, n_features, 0, &mut nodes);
+        Self { nodes, root }
+    }
+
+    /// Devuelve los `k` vecinos más cercanos a `query` como pares
+    /// `(dist², obs)` ordenados por distancia ascendente.
+    fn knn(&self, query: &[f64], k: usize) -> Vec<(f64, f64)> {
+        let mut best: Vec<(f64, f64)> = Vec::with_capacity(k + 1);
+        self.search(self.root, query, k, &mut best);
+        best
+    }
+
+    fn search(&self, node: Option<usize>, query: &[f64], k: usize, best: &mut Vec<(f64, f64)>) {
+        let Some(ni) = node else {
+            return;
+        };
+        let nd = &self.nodes[ni];
+        let d2: f64 = nd
+            .point
+            .iter()
+            .zip(query)
+            .map(|(a, b)| (a - b).powi(2))
+            .sum();
+        // Inserta manteniendo `best` ordenado ascendente, tamaño <= k.
+        if best.len() < k {
+            let pos = best.partition_point(|&(dd, _)| dd <= d2);
+            best.insert(pos, (d2, nd.obs));
+        } else if d2 < best[k - 1].0 {
+            let pos = best.partition_point(|&(dd, _)| dd <= d2);
+            best.insert(pos, (d2, nd.obs));
+            best.truncate(k);
+        }
+
+        let diff = query[nd.axis] - nd.point[nd.axis];
+        let (near, far) = if diff <= 0.0 {
+            (nd.left, nd.right)
+        } else {
+            (nd.right, nd.left)
+        };
+        self.search(near, query, k, best);
+        // Visita el subárbol lejano solo si puede contener un vecino mejor.
+        let worst = best.last().map_or(f64::INFINITY, |&(d, _)| d);
+        if best.len() < k || diff * diff < worst {
+            self.search(far, query, k, best);
+        }
+    }
+
+    /// k-NN por fuerza bruta (referencia para el test de equivalencia).
+    #[cfg(test)]
+    fn knn_bruteforce(&self, query: &[f64], k: usize) -> Vec<(f64, f64)> {
+        let mut all: Vec<(f64, f64)> = self
+            .nodes
+            .iter()
+            .map(|nd| {
+                let d2 = nd
+                    .point
+                    .iter()
+                    .zip(query)
+                    .map(|(a, b)| (a - b).powi(2))
+                    .sum();
+                (d2, nd.obs)
+            })
+            .collect();
+        all.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("sin NaN"));
+        all.truncate(k);
+        all
+    }
+}
+
+/// Construcción recursiva: elige la mediana del `axis` actual como nodo y
+/// reparte el resto en los subárboles. Devuelve el índice del nodo creado.
+fn build_node(
+    indices: &mut [usize],
+    points: &[f64],
+    obs: &[f64],
+    n_features: usize,
+    depth: usize,
+    nodes: &mut Vec<KdNode>,
+) -> Option<usize> {
+    if indices.is_empty() {
+        return None;
+    }
+    let axis = depth % n_features;
+    let mid = indices.len() / 2;
+    indices.select_nth_unstable_by(mid, |&a, &b| {
+        points[a * n_features + axis]
+            .partial_cmp(&points[b * n_features + axis])
+            .expect("archivo validado sin NaN")
+    });
+    let median = indices[mid];
+    let (left_idx, rest) = indices.split_at_mut(mid);
+    let right_idx = &mut rest[1..];
+    let left = build_node(left_idx, points, obs, n_features, depth + 1, nodes);
+    let right = build_node(right_idx, points, obs, n_features, depth + 1, nodes);
+    let point = points[median * n_features..(median + 1) * n_features].to_vec();
+    nodes.push(KdNode {
+        point,
+        obs: obs[median],
+        axis,
+        left,
+        right,
+    });
+    Some(nodes.len() - 1)
 }
 
 /// Valida la matriz aplanada y devuelve el número de filas.
@@ -264,5 +393,62 @@ mod tests {
         assert!(AnalogDownscaling::fit(&[1.0, 2.0], 1, &obs, 3).is_err());
         let ad = AnalogDownscaling::fit(&[1.0, 2.0], 1, &obs, 1).unwrap();
         assert!(ad.predict_one(&[1.0, 2.0]).is_err());
+    }
+
+    /// LCG determinista en (0, 1).
+    fn uniform(seed: u64, n: usize) -> Vec<f64> {
+        let mut state = seed;
+        (0..n)
+            .map(|_| {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                ((state >> 11) as f64 + 0.5) / (1u64 << 53) as f64
+            })
+            .collect()
+    }
+
+    #[test]
+    fn kdtree_knn_matches_bruteforce() {
+        // Para datos continuos (sin empates) el k-d tree devuelve exactamente
+        // el mismo conjunto de vecinos que la fuerza bruta.
+        let n_features = 4;
+        let n = 600;
+        let points = uniform(1, n * n_features);
+        let obs = uniform(2, n);
+        let tree = KdTree::build(&points, &obs, n_features);
+
+        for q in 0..50 {
+            let query = uniform(100 + q as u64, n_features);
+            for &k in &[1usize, 5, 10, 25] {
+                let fast = tree.knn(&query, k);
+                let slow = tree.knn_bruteforce(&query, k);
+                assert_eq!(fast.len(), k);
+                for (a, b) in fast.iter().zip(&slow) {
+                    assert!((a.0 - b.0).abs() < 1e-12, "dist² difiere: {a:?} vs {b:?}");
+                    assert!((a.1 - b.1).abs() < 1e-12, "obs difiere: {a:?} vs {b:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn predict_matches_bruteforce_idw() {
+        // El downscaling completo coincide con la referencia por fuerza bruta.
+        let n_features = 3;
+        let n = 400;
+        let predictors = uniform(7, n * n_features);
+        let obs = uniform(8, n);
+        let k = 8;
+        let ad = AnalogDownscaling::fit(&predictors, n_features, &obs, k).unwrap();
+
+        for q in 0..40 {
+            let query = uniform(500 + q as u64, n_features);
+            let got = ad.predict_one(&query).unwrap();
+            // Referencia: fuerza bruta sobre el archivo estandarizado.
+            let qs = ad.standardize(&query);
+            let want = idw_mean(&ad.tree.knn_bruteforce(&qs, k));
+            assert!((got - want).abs() < 1e-9, "got {got}, want {want}");
+        }
     }
 }

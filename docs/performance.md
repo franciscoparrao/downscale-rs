@@ -16,13 +16,17 @@ validación, 100 cuantiles. Mediana de la estimación de criterion.
 | QDM — aplicar | 264 µs |
 | QM paramétrico gamma — calibrar (MLE) | 330 µs |
 | QM paramétrico gamma — aplicar (inversa gamma) | 3.55 ms |
-| Análogos k=10 — predecir (4 predictores) | 1.14 s |
+| Análogos k=10 — predecir (4 predictores) | 283 ms |
 | Regresión OLS — calibrar | 875 µs |
 
 La aplicación del QM paramétrico es ~20× más lenta que la del EQM por la
-inversa de la gamma incompleta (Newton/Halley por valor). Los análogos por
-fuerza bruta son O(n_val · n_cal · features); un índice espacial (k-d tree)
-los aceleraría — anotado para una versión futura si el caso lo exige.
+inversa de la gamma incompleta (Newton/Halley por valor). Los análogos usan
+un k-d tree (búsqueda k-NN exacta, O(log n) promedio por consulta): bajaron
+de 1.14 s a 283 ms (~4×) en este microbenchmark, que es el peor caso —
+predictores uniformes en 4-D, donde la poda del árbol es menos efectiva.
+Con predictores reales correlacionados o `k` menor el speedup es mayor. El
+test `kdtree_knn_matches_bruteforce` verifica que da el mismo conjunto de
+análogos que la fuerza bruta.
 
 ## Comparación cross-language
 

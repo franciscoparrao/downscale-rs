@@ -13,6 +13,14 @@ Tienes carpetas `downscaling` y `super-resolution-dem` pero no un motor
 operacional. El campo es scripts Python dispersos (xclim, cmethods). Rust lo
 hace determinista y batch-friendly para muchos puntos/grillas.
 
+## k-d tree para análogos (2026-06-15)
+`analog.rs` ahora usa un k-d tree (búsqueda k-NN exacta, sin deps) en vez de
+fuerza bruta. Microbenchmark análogos k=10 predict: 1.14 s → 283 ms (~4× en
+el peor caso: predictores uniformes 4-D; mayor con datos reales correlacionados
+o k menor). Test `kdtree_knn_matches_bruteforce` + `predict_matches_bruteforce_idw`
+garantizan resultados idénticos a la fuerza bruta. API pública sin cambios.
+95 tests Rust. docs/performance.md actualizado.
+
 ## Rendimiento (2026-06-13) — `docs/performance.md`
 Microbenchmarks criterion (`cargo bench`) + comparación cross-language
 (`scripts/benchmark_vs_python.py`). Corrección EQM completa del caso Quinta
