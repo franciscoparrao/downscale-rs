@@ -210,16 +210,24 @@ no-estacionariedad (megasequía post-2010). Limitación cerrada con GCMs crudos
 (abajo). scripts/fetch_gcm.py + experiment_gcm.py.
 
 ## Cadena multi-cuenca downscale-rs → rainflow (2026-06-19) — `docs/basins.md`
-Impacto del bias correction en hidrología, cuencas CAMELS-CL pluviales
-(8123001 Itata, 7330001 Perquilauquén) con GR4J. ERA5 puntual → corregida a
-CR2MET (QM mult) → 3 forzantes (cr2met/era5/era5_corr) → rainflow split-sample.
-Hallazgos: (1) cadena e2e funciona sobre cuencas reales; (2) corrección mejora
-forzante 10× (KS 0.07→0.006, 0.06→0.01); (3) impacto en KGE matizado
-(Perquilauquén 0.813→0.851 mejora; Itata ERA5 cruda ya buena) = compensación
-de parámetros (GR4J calibrado absorbe sesgo de volumen vía x1). Mensaje EMS:
-bias correction importa donde NO se puede calibrar (escenarios futuros GCM,
-cuencas sin aforo, análisis de la propia precip), no en calibración con qobs.
-scripts/experiment_basins.py. rainflow split-sample output: regex 'val [AB].*?: ([0-9.]+)'.
+Impacto del bias correction en hidrología, 4 cuencas CAMELS-CL: 2 pluviales
+(8123001 Itata, 7330001 Perquilauquén, GR4J) + 2 nivales Norte Chico (4511002
+Las Ramadas, 4703002 Choapa, HBV+nieve+temperatura). ERA5 puntual → corregida
+a CR2MET (QM mult para pr, add para tmean en nivales) → 3 forzantes → rainflow
+split-sample. Hallazgos: (1) cadena e2e funciona en GR4J y HBV; (2) corrección
+mejora forzante a KS ~0.008 en todas; sesgo crudo MAYOR en nivales semiáridas
+(0.14/0.27) que pluviales sur (0.06/0.07) = mismo gradiente árido de multistation;
+(3) impacto KGE matizado (Perquilauquén 0.813→0.851 y Las Ramadas 0.342→0.393
+mejoran; Itata/Choapa ERA5 cruda ya buena) = compensación de parámetros (modelo
+calibrado absorbe sesgo forzante vía x1/los 12 de HBV). Mensaje EMS: bias
+correction importa donde NO se calibra (GCM futuro, sin aforo, análisis precip).
+scripts/experiment_basins.py. rainflow split-sample parse: regex 'val [AB].*?: ([0-9.]+)'.
+
+## Paridad QM paramétrico vs SciPy (2026-06-19) — `docs/parity.md`
+Cierra la validación externa de TODOS los métodos QM: paramétrico normal
+(dif 1e-8, mismo estimador) y gamma mixta (dif 7e-11 — el MLE Thom+Newton +
+funciones especiales propias convergen al punto de scipy). scripts/parity_parametric.py.
+CI actions actualizadas a Node24 (checkout@v5, setup-python@v6).
 
 ## GCMs crudos ESGF/Pangeo (2026-06-19) — `docs/gcm-validation.md` §crudos
 Cierra la limitación: GCMs CMIP6 *crudos* (~200-300 km, sin downscaling) del

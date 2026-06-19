@@ -93,6 +93,24 @@ interpolamos sobre la CDF de nodos — ambos estimadores consistentes que
 difieren en las colas. En este caso la variante nuestra reproduce mejor la
 distribución observada del holdout.
 
+## QM paramétrico vs SciPy (2026-06-19)
+
+El EQM y el QDM se validan contra xsdba; el QM paramétrico (normal y gamma
+mixta con masa en cero) se valida contra SciPy, replicando su
+`x_corr = F_obs⁻¹(F_mod(x))` con `scipy.stats` sobre datos sintéticos
+(`scripts/parity_parametric.py`):
+
+| familia | diferencia máxima |
+|---|---|
+| normal | 1.1e-08 |
+| gamma mixta | 6.9e-11 |
+
+Ambas coinciden a precisión de máquina. La gamma es la prueba más exigente:
+confirma que el MLE propio (Thom + Newton) y las funciones especiales
+in-crate (gamma incompleta y su inversa, `src/special.rs`) convergen al
+mismo punto que SciPy. Cierra la validación externa de todos los métodos de
+quantile mapping del motor.
+
 ## Tolerancias declaradas (vs xsdba EQM, este dataset)
 
 - Días secos: exactos (Δ = 0).
