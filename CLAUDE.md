@@ -209,6 +209,18 @@ ERA5 (KS val 0.008-0.018); (3) sesgo corregido levemente negativo = misma
 no-estacionariedad (megasequía post-2010). Limitación cerrada con GCMs crudos
 (abajo). scripts/fetch_gcm.py + experiment_gcm.py.
 
+## Cadena multi-cuenca downscale-rs → rainflow (2026-06-19) — `docs/basins.md`
+Impacto del bias correction en hidrología, cuencas CAMELS-CL pluviales
+(8123001 Itata, 7330001 Perquilauquén) con GR4J. ERA5 puntual → corregida a
+CR2MET (QM mult) → 3 forzantes (cr2met/era5/era5_corr) → rainflow split-sample.
+Hallazgos: (1) cadena e2e funciona sobre cuencas reales; (2) corrección mejora
+forzante 10× (KS 0.07→0.006, 0.06→0.01); (3) impacto en KGE matizado
+(Perquilauquén 0.813→0.851 mejora; Itata ERA5 cruda ya buena) = compensación
+de parámetros (GR4J calibrado absorbe sesgo de volumen vía x1). Mensaje EMS:
+bias correction importa donde NO se puede calibrar (escenarios futuros GCM,
+cuencas sin aforo, análisis de la propia precip), no en calibración con qobs.
+scripts/experiment_basins.py. rainflow split-sample output: regex 'val [AB].*?: ([0-9.]+)'.
+
 ## GCMs crudos ESGF/Pangeo (2026-06-19) — `docs/gcm-validation.md` §crudos
 Cierra la limitación: GCMs CMIP6 *crudos* (~200-300 km, sin downscaling) del
 archivo público Pangeo CMIP6 (Google Cloud, zarr, anon, sin auth) —
