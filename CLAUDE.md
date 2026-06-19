@@ -186,6 +186,17 @@ LICENSE-APACHE, README.md en inglés (cara pública / paper EMS).
 - [x] Job `python` en CI: maturin build + pip install wheel + pytest
   (12 tests Python ahora en CI; el de datos reales hace pytest.skip).
 
+## Generalización multi-estación (2026-06-19) — `docs/multistation.md`
+9 estaciones del gradiente climático de Chile (Arica desierto → Punta Arenas
+subpolar, lat −18 a −53, 2 a 1743 mm/año). EQM mult, split 70/30. Hallazgos:
+(1) el motor generaliza operacionalmente (corre sin cambios en 9 climas);
+(2) sesgo de ERA5 con gradiente latitudinal claro — catastrófico en desierto
+(Arica KS crudo 0.617, "moja" Atacama) → bueno en sur lluvioso (KS ~0.013);
+(3) en las 5 con sesgo sustancial (KS>0.1), reducción media 81%; (4) clave:
+sesgo del modelo ≠ no-estacionariedad — en el sur lluvioso el EQM empeora
+levemente (megasequía: cal 1950-2000 más lluviosa que val), residuo es cambio
+del clima no sesgo → motiva QDM (trend-preserving). scripts/experiment_multistation.py.
+
 ## Validación con GCMs reales CMIP6 (2026-06-15) — `docs/gcm-validation.md`
 4 GCMs CMIP6 (MRI-AGCM3-2-S, EC-Earth3P-HR, MPI-ESM1-2-XR, CMCC-CM2-VHR4)
 vía Open-Meteo Climate API. Cierra la brecha: el motor probado con su caso
