@@ -206,9 +206,20 @@ KS/sesgo/frecuencia, no RMSE; split por período 1950-99/2000-18). Hallazgos:
 (1) drizzle bias universal — todos sobreestiman días húmedos (14-25% vs 10%
 obs), el QM corrige a ~10%; (2) el motor corrige los 4 GCMs tan bien como
 ERA5 (KS val 0.008-0.018); (3) sesgo corregido levemente negativo = misma
-no-estacionariedad (megasequía post-2010). Limitación honesta: los CMIP6 de
-Open-Meteo (HighResMIP) ya vienen downscaled ~10km → sesgo comparable a ERA5,
-no el de un GCM crudo (ESGF, pendiente). scripts/fetch_gcm.py + experiment_gcm.py.
+no-estacionariedad (megasequía post-2010). Limitación cerrada con GCMs crudos
+(abajo). scripts/fetch_gcm.py + experiment_gcm.py.
+
+## GCMs crudos ESGF/Pangeo (2026-06-19) — `docs/gcm-validation.md` §crudos
+Cierra la limitación: GCMs CMIP6 *crudos* (~200-300 km, sin downscaling) del
+archivo público Pangeo CMIP6 (Google Cloud, zarr, anon, sin auth) —
+IPSL-CM6A-LR, MPI-ESM1-2-LR, CanESM5. Sesgo estructural extremo: IPSL
+sobreestima precip 3.6× (1055 vs 291 mm/año, 68% días húmedos vs 10%, KS
+crudo 0.675 = el mayor del proyecto); CanESM drizzle severo (KS 0.595); MPI
+acierta el total (KS 0.146). QM los corrige TODOS a KS<0.03. Gradiente
+resolución→sesgo confirmado: HighResMIP-XR ~10km (KS 0.059) < ERA5 ~25km <
+MPI crudo ~200km (0.146). scripts/fetch_gcm_raw.py + experiment_gcm_raw.py.
+Acceso Pangeo: catálogo storage.googleapis.com/cmip6/pangeo-cmip6.csv,
+xr.open_zarr(store, storage_options={"token":"anon"}). Deps: gcsfs, zarr.
 
 ## WASM (2026-06-14) — patrón multi-target COMPLETO
 `crates/downscale-wasm` (wasm-bindgen, convención surtgis-wasm): expone

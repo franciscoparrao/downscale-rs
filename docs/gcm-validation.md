@@ -58,16 +58,50 @@ observada = 10.1 %.)
    en el pasado deja un residuo. Es una limitación intrínseca del bias
    correction estacionario, no del motor.
 
-## Limitación honesta
+## GCMs crudos (Pangeo / Google Cloud CMIP6)
 
-Los productos CMIP6 de Open-Meteo provienen de **HighResMIP** y ya están
-estadísticamente downscaled a ~10 km. Por eso su sesgo residual es
-comparable al de ERA5 y no mayor, como sería el de un GCM **crudo** (~100–250
-km, sin ajuste previo). El experimento demuestra el flujo GCM→local con datos
-CMIP6 reales y la metodología distribucional correcta, pero no representa el
-sesgo de magnitud completa de un GCM sin procesar. Para ese caso se
-requeriría descargar GCMs crudos (p. ej. desde ESGF), pendiente para una
-validación más exigente.
+Los productos CMIP6 de Open-Meteo provienen de **HighResMIP**, ya
+downscaled a ~10 km, por lo que su sesgo es comparable al de un reanálisis.
+El caso exigente real es el GCM **crudo** (~200–300 km, sin ajuste): la
+celda que contiene Santiago promedia océano Pacífico, valle central y
+cordillera. Reproducible con `scripts/fetch_gcm_raw.py` (archivo público
+Pangeo CMIP6, zarr, sin autenticación) + `scripts/experiment_gcm_raw.py`;
+precipitación diaria, escenario `historical`, miembro `r1i1p1f1`, split por
+período. Observado: 291 mm/año, 10 % días húmedos.
+
+| Modelo | resolución | mm/año | días húm. | KS crudo | KS corr | sesgo crudo | sesgo corr |
+|---|---|---|---|---|---|---|---|
+| IPSL-CM6A-LR | 209 km | 1055 | 68 % | **0.675** | 0.026 | +2.09 | +0.20 |
+| MPI-ESM1-2-LR | 208 km | 306 | 15 % | 0.146 | 0.016 | +0.04 | −0.13 |
+| CanESM5 | 311 km | 318 | 26 % | 0.595 | 0.009 | +0.07 | −0.09 |
+
+Gradiente **resolución → sesgo** (familia MPI, KS crudo vs estación):
+ERA5 ~25 km → 0.145 · MPI HighResMIP-XR ~10 km → **0.059** · MPI crudo LR
+~200 km → 0.146.
+
+### Hallazgos
+
+1. **El sesgo del GCM crudo es estructural y puede ser extremo.**
+   IPSL-CM6A-LR sobreestima la precipitación **3,6×** (1055 vs 291 mm/año)
+   y llueve el 68 % de los días (vs 10 % observado) — un KS de 0.675, el
+   mayor de todo el proyecto. CanESM5 acierta el total pero tiene drizzle
+   severo (26 % días húmedos, KS 0.595). La magnitud depende del modelo y de
+   qué captura su celda gruesa: MPI-ESM1-2-LR acierta casi el total (KS
+   0.146, como ERA5).
+
+2. **El quantile mapping lo corrige igual.** Incluso el caso extremo de IPSL
+   (sobreestimación 3,6×) queda en KS 0.026; CanESM5 en 0.009. El motor
+   maneja el sesgo de magnitud completa de un GCM sin procesar, no solo el
+   residuo suave de un producto ya downscaled.
+
+3. **El downscaling reduce el sesgo de partida**, como esperado: el
+   HighResMIP-XR (~10 km, KS 0.059) mejora sobre ERA5 y sobre el GCM crudo de
+   la misma familia (~200 km, KS 0.146).
+
+Esto cierra la validación con el caso de uso más duro: GCMs crudos reales de
+ESGF/Pangeo, no productos pre-ajustados. El residuo corregido positivo en
+IPSL (+0.20) refleja, de nuevo, la no-estacionariedad del período de
+validación.
 
 ## Lectura para el paper (EMS)
 
