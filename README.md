@@ -18,6 +18,8 @@ single-binary, no GDAL/Python chain.
 - Wet-day frequency correction by threshold adaptation (Themeßl et al. 2012).
 - Multivariate: Schaake shuffle (Clark et al. 2004) and MBCn (Cannon
   2018) — iterative correction of the full dependence structure.
+- Gridded fields: per-cell correction of `[time, lat, lon]` fields with a
+  sea mask, computed in the core with xarray handling the NetCDF I/O.
 
 **Downscaling**
 - Analog method: standardized k-NN over large-scale predictors,

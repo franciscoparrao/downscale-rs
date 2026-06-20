@@ -5,7 +5,9 @@
 //! `kind` ∈ {"add", "mult"}, `nodes` ∈ {"endpoints", "midpoint"},
 //! `dist` ∈ {"normal", "gamma"}.
 
-use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{
+    IntoPyArray, PyArray1, PyArrayDyn, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArrayDyn,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -416,6 +418,49 @@ fn mbcn<'py>(
     Ok(arr.into_pyarray(py))
 }
 
+/// Corrige el sesgo de un campo grillado celda por celda. `obs` y `model`
+/// son arrays con el tiempo en el primer eje y la(s) dimensión(es)
+/// espacial(es) después (p. ej. `[time, lat, lon]`); deben compartir la
+/// grilla espacial. Devuelve el campo corregido con la forma de `model`.
+/// Las celdas con algún NaN (mar/máscara) salen NaN. Pensado para enchufar
+/// con xarray: `xr.open_dataarray(...)` → `correct_grid(obs, model)` →
+/// `xr.DataArray(out, ...).to_netcdf(...)`.
+#[pyfunction]
+#[pyo3(signature = (obs, model, n_quantiles=100, kind="mult", nodes="midpoint"))]
+fn correct_grid<'py>(
+    py: Python<'py>,
+    obs: PyReadonlyArrayDyn<'_, f64>,
+    model: PyReadonlyArrayDyn<'_, f64>,
+    n_quantiles: usize,
+    kind: &str,
+    nodes: &str,
+) -> PyResult<Bound<'py, PyArrayDyn<f64>>> {
+    use numpy::ndarray::ArrayD;
+    let obs_v = obs.as_array();
+    let mod_v = model.as_array();
+    if obs_v.shape()[1..] != mod_v.shape()[1..] {
+        return Err(PyValueError::new_err(format!(
+            "grilla espacial distinta: obs {:?} vs model {:?}",
+            &obs_v.shape()[1..],
+            &mod_v.shape()[1..]
+        )));
+    }
+    let n_cells: usize = mod_v.shape()[1..].iter().product();
+    // Aplana en C-order (tiempo externo, celdas internas) — el layout del core.
+    let obs_flat: Vec<f64> = obs_v.iter().copied().collect();
+    let mod_flat: Vec<f64> = mod_v.iter().copied().collect();
+    let opts = core::GridOptions {
+        n_quantiles,
+        kind: parse_kind(kind)?,
+        placement: parse_nodes(nodes)?,
+    };
+    let out = core::correct_grid(&obs_flat, &mod_flat, n_cells, &opts).map_err(err)?;
+    let shape: Vec<usize> = mod_v.shape().to_vec();
+    let arr =
+        ArrayD::from_shape_vec(shape, out).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(arr.into_pyarray(py))
+}
+
 /// PET de Hargreaves (mm/día) con radiación extraterrestre FAO-56.
 /// `days_of_year`: día del año (1..=366) por paso; `latitude_deg`: sur negativo.
 #[pyfunction]
@@ -529,6 +574,7 @@ fn downscale_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LinearDownscaling>()?;
     m.add_function(wrap_pyfunction!(schaake_shuffle, m)?)?;
     m.add_function(wrap_pyfunction!(mbcn, m)?)?;
+    m.add_function(wrap_pyfunction!(correct_grid, m)?)?;
     m.add_function(wrap_pyfunction!(hargreaves, m)?)?;
     m.add_function(wrap_pyfunction!(rmse, m)?)?;
     m.add_function(wrap_pyfunction!(mean_bias, m)?)?;

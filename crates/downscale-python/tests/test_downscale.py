@@ -152,6 +152,19 @@ def test_mbcn_recovers_dependence():
     assert np.array_equal(out, out2)
 
 
+def test_correct_grid_3d():
+    # Campo [time, lat, lon] con sesgo multiplicativo por celda + máscara de mar.
+    obs = rng.gamma(1.0, 3.0, (500, 2, 3))
+    factor = 1.0 + 0.2 * np.arange(6).reshape(2, 3)
+    model = obs * factor
+    model[:, 0, 0] = np.nan  # mar
+    out = ds.correct_grid(obs, model, kind="mult")
+    assert out.shape == model.shape
+    assert np.isnan(out[:, 0, 0]).all()  # celda enmascarada
+    # celda válida: sesgo medio corregido ≈ 0
+    assert abs(out[:, 1, 2].mean() - obs[:, 1, 2].mean()) < 1e-6
+
+
 def test_real_data_matches_rust_cli():
     """Paridad bindings vs CLI sobre el caso Quinta Normal (si hay datos)."""
     import os

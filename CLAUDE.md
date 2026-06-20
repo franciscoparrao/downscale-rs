@@ -209,6 +209,17 @@ ERA5 (KS val 0.008-0.018); (3) sesgo corregido levemente negativo = misma
 no-estacionariedad (megasequía post-2010). Limitación cerrada con GCMs crudos
 (abajo). scripts/fetch_gcm.py + experiment_gcm.py.
 
+## Corrección de grillas raster (2026-06-20) — `docs/grid.md`
+`grid.rs::correct_grid` (core): corrige campo grillado aplanado [n_time×n_cells]
+celda por celda (QM), máscara de mar (celda con NaN → NaN), reusa QM, sin I/O.
+Binding Python `correct_grid` acepta/devuelve arrays 3D [time,lat,lon] (xarray
+hace el NetCDF). Demo real (scripts/experiment_grid.py): GCM crudo MPI ~200km
+sobre Chile (7×2 celdas) → corregido celda-a-celda hacia ERA5 (bulk en
+centroides); sesgo areal +115 → −2 mm/año; mapa site/grid_correction.png (3
+paneles GCM/ERA5/corregido, el corregido adopta estructura espacial de ERA5).
+84 tests lib + 16 Python. Cierra el caso de uso raster del propósito declarado.
+Arquitectura: core hace cómputo (paralelizable, celdas independientes), xarray I/O.
+
 ## Cadena multi-cuenca downscale-rs → rainflow (2026-06-19) — `docs/basins.md`
 Impacto del bias correction en hidrología, 4 cuencas CAMELS-CL: 2 pluviales
 (8123001 Itata, 7330001 Perquilauquén, GR4J) + 2 nivales Norte Chico (4511002

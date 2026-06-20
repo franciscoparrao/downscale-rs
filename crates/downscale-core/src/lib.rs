@@ -16,6 +16,8 @@
 //! - [`mbcn`]: MBCn (Cannon 2018) — corrección multivariada iterativa de
 //!   marginales y estructura de dependencia completa (v0.2).
 //! - [`pet`]: PET de Hargreaves con radiación extraterrestre FAO-56 (v0.2).
+//! - [`grid`]: corrección de sesgo de campos grillados celda por celda
+//!   (NetCDF/GeoTIFF vía las superficies), con máscara de mar.
 //! - [`parametric`]: QM paramétrico — normal (temperatura) y gamma mixta
 //!   con masa en cero (precipitación; corrige frecuencia de días húmedos).
 //! - [`analog`]: downscaling por análogos (k-NN estandarizado).
@@ -54,6 +56,7 @@ pub mod analog;
 pub mod delta;
 pub mod error;
 pub mod forcing;
+pub mod grid;
 pub mod mbcn;
 pub mod metrics;
 pub mod multivariate;
@@ -70,6 +73,7 @@ pub use analog::AnalogDownscaling;
 pub use delta::DeltaChange;
 pub use error::{DownscaleError, Result};
 pub use forcing::{ForcingSeries, ForcingSet, Variable, areal_average};
+pub use grid::{GridOptions, correct_grid};
 pub use mbcn::{MbcnOptions, mbcn};
 pub use multivariate::schaake_shuffle;
 pub use parametric::{Distribution, ParametricQuantileMapping};
